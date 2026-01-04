@@ -1,0 +1,353 @@
+---
+name: new
+description: Create Railway projects and services. Use when user wants to deploy to Railway, create a new project, link to existing project, create a new service, or set up code to work on Railway. Handles "create a vite app", "add a backend service", "init a new project", etc.
+allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*)
+---
+
+# New Project / Service
+
+Create Railway projects and services with proper configuration.
+
+## When to Use
+
+- User says "deploy to railway" but no project is linked
+- User says "create a railway project", "init", "new project"
+- User says "link to railway", "connect to railway"
+- User says "create a service", "add a backend", "new api service"
+- User says "create a vite app", "create a react website", "make a python api"
+- Setting up code + Railway service together
+
+## Prerequisites
+
+Check CLI installed:
+```bash
+command -v railway
+```
+
+If not installed:
+> Install Railway CLI:
+> ```
+> npm install -g @railway/cli
+> ```
+> or
+> ```
+> brew install railway
+> ```
+
+Check authenticated:
+```bash
+railway whoami --json
+```
+
+If not authenticated:
+> Run `railway login` to authenticate.
+
+## Decision Flow
+
+```
+railway status --json
+     │
+┌────┴────┐
+Linked    Not Linked
+  │            │
+  │       railway list --json
+  │            │
+  │       ┌────┴────┐
+  │      Match?    No match
+  │        │          │
+  │      Link      Init new
+  │        │          │
+  └────────┴──────────┘
+           │
+    User wants service?
+           │
+     ┌─────┴─────┐
+    Yes         No
+     │           │
+Scaffold code   Done
+     │
+railway add --service
+     │
+Configure if needed
+     │
+Ready to deploy
+```
+
+## Check Current State
+
+```bash
+railway status --json
+```
+
+- **If linked**: Skip to service creation if user wants to add a service
+- **If not linked**: Proceed with init or link flow first
+
+## Init vs Link Decision
+
+### Check User's Projects
+```bash
+railway list --json
+```
+
+### Decision Logic
+
+1. **User explicitly says "new project"** → Use `railway init`
+2. **User names an existing project** → Use `railway link`
+3. **Directory name matches existing project** → Ask: link existing or create new?
+4. **No matching projects** → Use `railway init`
+5. **Ambiguous** → Ask user
+
+## Create New Project
+
+```bash
+railway init -n <name>
+```
+
+Options:
+- `-n, --name` - Project name (defaults to directory name)
+- `-w, --workspace` - Workspace name or ID
+
+## Link Existing Project
+
+```bash
+railway link -p <project>
+```
+
+Options:
+- `-p, --project` - Project name or ID
+- `-e, --environment` - Environment (default: production)
+- `-s, --service` - Service to link
+- `-t, --team` - Team/workspace
+
+## Create Service
+
+After project is linked, create a service:
+
+```bash
+railway add --service <name>
+```
+
+### Configure Based on Project Type
+
+Reference [railpack.md](../reference/railpack.md) for build configuration.
+Reference [monorepo.md](../reference/monorepo.md) for monorepo patterns.
+
+**Static site (Vite, CRA, Astro static):**
+- If output is `dist/`: set `RAILPACK_STATIC_FILE_ROOT=dist`
+- If output is `build/`: set `RAILPACK_STATIC_FILE_ROOT=build`
+- Use `environment-update` skill to set the variable
+
+**Node.js SSR (Next.js, Nuxt, Express):**
+- Verify `start` script exists in package.json
+- If custom start needed: use `environment-update` to set `startCommand`
+
+**Python (FastAPI, Django, Flask):**
+- Verify `requirements.txt` or `pyproject.toml` exists
+- Auto-detected by Railpack, usually no config needed
+
+**Go:**
+- Verify `go.mod` exists
+- Auto-detected, no config needed
+
+### Monorepo Configuration
+
+**Critical decision:** Root directory vs custom commands.
+
+**Isolated monorepo** (apps don't share code):
+- Set Root Directory to the app's subdirectory (e.g., `/frontend`)
+- Only that directory's code is available during build
+
+**Shared monorepo** (TypeScript workspaces, shared packages):
+- Do NOT set root directory
+- Set custom build/start commands to filter the package:
+  - pnpm: `pnpm --filter <package> build`
+  - npm: `npm run build --workspace=packages/<package>`
+  - yarn: `yarn workspace <package> build`
+  - Turborepo: `turbo run build --filter=<package>`
+- Set watch paths to prevent unnecessary rebuilds
+
+See [monorepo.md](../reference/monorepo.md) for detailed patterns.
+
+## Project Setup Guidance
+
+Analyze the codebase to ensure Railway compatibility.
+
+### Analyze Codebase
+
+Check for existing project files:
+- `package.json` → Node.js project
+- `requirements.txt`, `pyproject.toml` → Python project
+- `go.mod` → Go project
+- `Cargo.toml` → Rust project
+- `index.html` → Static site
+- None → Guide scaffolding
+
+**Monorepo detection:**
+- `pnpm-workspace.yaml` → pnpm workspace (shared monorepo)
+- `package.json` with `workspaces` field → npm/yarn workspace (shared monorepo)
+- `turbo.json` → Turborepo (shared monorepo)
+- Multiple subdirs with separate `package.json` but no workspace config → isolated monorepo
+
+### Scaffolding Hints
+
+If no code exists, suggest minimal patterns from [railpack.md](../reference/railpack.md):
+
+**Static site:**
+> Create an `index.html` file in the root directory.
+
+**Vite React:**
+```bash
+npm create vite@latest . -- --template react
+```
+
+**Astro:**
+```bash
+npm create astro@latest
+```
+
+**Python FastAPI:**
+> Create `main.py` with FastAPI app and `requirements.txt` with dependencies.
+
+**Go:**
+> Create `main.go` with HTTP server listening on `PORT` env var.
+
+## Composability
+
+- **After service created**: Use `deploy` skill to push code
+- **For advanced config**: Use `environment-update` skill (buildCommand, startCommand)
+- **For domains**: Use `domain` skill
+- **For status checks**: Use `status` skill
+- **For service operations** (rename, delete, status): Use `service` skill
+
+## Error Handling
+
+### CLI Not Installed
+```
+Railway CLI not installed. Install with:
+  npm install -g @railway/cli
+or
+  brew install railway
+```
+
+### Not Authenticated
+```
+Not logged in to Railway. Run: railway login
+```
+
+### No Workspaces
+```
+No workspaces found. Create one at railway.com or verify authentication.
+```
+
+### Project Name Taken
+```
+Project name already exists. Either:
+- Link to existing: railway link -p <name>
+- Use different name: railway init -n <other-name>
+```
+
+### Service Name Taken
+```
+Service name already exists in this project. Use a different name:
+  railway add --service <other-name>
+```
+
+## Examples
+
+### Create HTML Static Site
+```
+User: "create a simple html site and deploy to railway"
+
+1. Check status → not linked
+2. railway init -n my-site
+3. Guide: create index.html
+4. railway add --service my-site
+5. No config needed (index.html in root auto-detected)
+6. Use deploy skill: railway up
+7. Use domain skill for public URL
+```
+
+### Create Vite React Service
+```
+User: "create a vite react service"
+
+1. Check status → linked (or init/link first)
+2. Scaffold: npm create vite@latest frontend -- --template react
+3. railway add --service frontend
+4. Configure: set RAILPACK_STATIC_FILE_ROOT=dist via environment-update
+5. Use deploy skill: railway up
+```
+
+### Add Python API to Project
+```
+User: "add a python api to my project"
+
+1. Check status → linked
+2. Guide: create main.py with FastAPI, requirements.txt
+3. railway add --service api
+4. No config needed (FastAPI auto-detected)
+5. Use deploy skill
+```
+
+### Link and Add Service
+```
+User: "connect to my backend project and add a worker service"
+
+1. railway list --json → find "backend"
+2. railway link -p backend
+3. railway add --service worker
+4. Guide setup based on worker type
+```
+
+### Deploy to Railway (Ambiguous)
+```
+User: "deploy to railway"
+
+1. railway status → not linked
+2. railway list → has projects
+3. Directory is "my-app", found project "my-app"
+4. Ask: "Found existing project 'my-app'. Link to it or create new?"
+5. User: "link"
+6. railway link -p my-app
+7. Ask: "Create a service for this code?"
+```
+
+### Add Service to Isolated Monorepo
+```
+User: "create a static site in the frontend directory"
+
+1. Check: /frontend has its own package.json, no workspace config
+2. This is isolated monorepo → use root directory
+3. railway add --service frontend
+4. Configure via environment-update:
+   - rootDirectory: /frontend
+   - RAILPACK_STATIC_FILE_ROOT=dist (if Vite)
+5. Set watch paths: /frontend/**
+```
+
+### Add Service to TypeScript Monorepo
+```
+User: "add a new api package to this turborepo"
+
+1. Check: turbo.json exists, pnpm-workspace.yaml exists
+2. This is shared monorepo → use custom commands, NOT root directory
+3. Guide: create packages/api with package.json
+4. railway add --service api
+5. Configure via environment-update:
+   - buildCommand: turbo run build --filter=api
+   - startCommand: turbo run start --filter=api
+   - (do NOT set rootDirectory)
+6. Set watch paths: /packages/api/**, /packages/shared/**
+```
+
+### Deploy Existing pnpm Workspace Package
+```
+User: "deploy the backend package to railway"
+
+1. Check: pnpm-workspace.yaml exists → shared monorepo
+2. railway add --service backend
+3. Configure via environment-update:
+   - buildCommand: pnpm --filter backend build
+   - startCommand: pnpm --filter backend start
+4. Set watch paths for backend + any shared deps
+```

@@ -1,21 +1,22 @@
 ---
 name: service
-description: Manage Railway services. Use when user wants to create a new service, check service status, rename a service, change service icon, or link a service. There is no CLI for creating services - use this skill.
+description: Manage existing Railway services. Use for checking service status, renaming services, changing icons, linking services, or advanced service creation (Docker images, GitHub repos). For creating services with local code, prefer the `new` skill.
 ---
 
 # Service Management
 
-Create services, check status, and update service properties.
+Check status, update properties, and advanced service creation.
 
 ## When to Use
 
-- User asks to "create a service", "add a service", "new service"
-- User wants to deploy a Docker image as a new service
-- User wants to add a GitHub repo as a new service
 - User asks about service status, health, or deployments
-- User wants to rename a service or change service icon
 - User asks "is my service deployed?"
+- User wants to rename a service or change service icon
 - User wants to link a different service
+- User wants to deploy a Docker image as a new service (advanced)
+- User wants to add a GitHub repo as a new service (advanced)
+
+**Note:** For creating services with local code (the common case), prefer the `new` skill which handles project setup, scaffolding, and service creation together.
 
 ## Create Service
 
@@ -195,6 +196,7 @@ railway service link <service-name>
 
 ## Composability
 
+- **Create service with local code**: Use `new` skill (handles scaffolding + creation)
 - **Configure service**: Use `environment-update` skill (variables, commands, image, etc.)
 - **Delete service**: Use `environment-update` skill with `isDeleted: true`
 - **Apply changes**: Use `environment-apply` skill

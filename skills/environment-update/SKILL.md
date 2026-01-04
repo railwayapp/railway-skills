@@ -1,6 +1,6 @@
 ---
 name: environment-update
-description: Update Railway service configuration via API. Use when user wants to set variables, change Docker image, configure build/start commands, add replicas, health checks, or modify any service config. Do NOT use `railway variables` CLI - use this skill instead. For deploying a Docker image to an existing service, use this skill (not `railway up`).
+description: Update Railway service configuration via API. Use when user wants to set variables, change Docker image, configure build/start commands, add replicas, health checks, delete a service, or modify any service config. Do NOT use `railway variables` CLI - use this skill instead. For deploying a Docker image to an existing service, use this skill (not `railway up`).
 ---
 
 # Update Environment Configuration
@@ -87,6 +87,17 @@ skills/lib/railway-api.sh \
     environmentStageChanges(environmentId: $environmentId, input: $input) { id }
   }' \
   '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"build": {"buildCommand": "npm run build"}}}}}'
+```
+
+### Delete Service
+
+Use `isDeleted: true` (not `deleted`):
+```bash
+skills/lib/railway-api.sh \
+  'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!) {
+    environmentStageChanges(environmentId: $environmentId, input: $input) { id }
+  }' \
+  '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"isDeleted": true}}}}'
 ```
 
 For patch structure and available fields, see [reference/environment-config.md](../reference/environment-config.md).
