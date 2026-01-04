@@ -29,13 +29,16 @@ Railpack serves static files via Caddy when it detects:
 
 ### Common Patterns
 
+Railpack auto-detects common static build outputs. Only set `RAILPACK_STATIC_FILE_ROOT` for non-standard output directories.
+
 | Framework | Build Output | Config Needed |
 |-----------|--------------|---------------|
-| Plain HTML | root | None (index.html detected) |
-| Vite | dist | `RAILPACK_STATIC_FILE_ROOT=dist` |
-| Astro (static) | dist | `RAILPACK_STATIC_FILE_ROOT=dist` |
-| Create React App | build | `RAILPACK_STATIC_FILE_ROOT=build` |
-| Angular | dist/<project> | `RAILPACK_STATIC_FILE_ROOT=dist/<project>` |
+| Plain HTML | root | None (auto-detected) |
+| Vite | dist | None (auto-detected) |
+| Astro (static) | dist | None (auto-detected) |
+| Create React App | build | None (auto-detected) |
+| Angular | dist/<project> | `RAILPACK_STATIC_FILE_ROOT=dist/<project>` (non-standard path) |
+| Custom output | varies | Set if output dir is non-standard |
 
 ### Custom Caddyfile
 
@@ -246,7 +249,7 @@ func main() {
 
 | Issue | Solution |
 |-------|----------|
-| Static site 404s | Set `RAILPACK_STATIC_FILE_ROOT` to actual output dir |
+| Static site 404s | Check output dir - set `RAILPACK_STATIC_FILE_ROOT` if non-standard |
 | Wrong build command | Use `environment` skill to set `buildCommand` |
 | Wrong start command | Use `environment` skill to set `startCommand` |
 | Missing system package | Add to `RAILPACK_BUILD_APT_PACKAGES` or `RAILPACK_DEPLOY_APT_PACKAGES` |

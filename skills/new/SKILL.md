@@ -45,19 +45,24 @@ If not authenticated:
 ## Decision Flow
 
 ```
-railway status --json
+railway status --json (in current dir)
      │
 ┌────┴────┐
 Linked    Not Linked
   │            │
-  │       railway list --json
+  │       Check parent: cd .. && railway status --json
   │            │
   │       ┌────┴────┐
-  │      Match?    No match
-  │        │          │
-  │      Link      Init new
-  │        │          │
-  └────────┴──────────┘
+  │    Parent      Not linked
+  │    Linked      anywhere
+  │       │            │
+  │   Add service   railway list
+  │   Set rootDir      │
+  │   Deploy       ┌───┴───┐
+  │       │      Match?  No match
+  │       │        │        │
+  │       │      Link    Init new
+  └───────┴────────┴────────┘
            │
     User wants service?
            │
@@ -80,7 +85,22 @@ railway status --json
 ```
 
 - **If linked**: Skip to service creation if user wants to add a service
-- **If not linked**: Proceed with init or link flow first
+- **If not linked**: Check if a PARENT directory is linked (see below)
+
+### Parent Directory Linking
+
+Railway CLI walks up the directory tree to find a linked project. If you're in a subdirectory:
+
+```bash
+cd .. && railway status --json
+```
+
+**If parent is linked**, you don't need to init/link the subdirectory. Instead:
+1. Create service: `railway add --service <name>`
+2. Set `rootDirectory` to subdirectory path via environment skill
+3. Deploy from root: `railway up`
+
+**If no parent is linked**, proceed with init or link flow.
 
 ## Init vs Link Decision
 
@@ -133,13 +153,13 @@ Reference [railpack.md](../reference/railpack.md) for build configuration.
 Reference [monorepo.md](../reference/monorepo.md) for monorepo patterns.
 
 **Static site (Vite, CRA, Astro static):**
-- If output is `dist/`: set `RAILPACK_STATIC_FILE_ROOT=dist`
-- If output is `build/`: set `RAILPACK_STATIC_FILE_ROOT=build`
-- Use `environment` skill to set the variable
+- Railpack auto-detects common output dirs (dist, build)
+- If non-standard output dir: invoke `environment` skill to set `RAILPACK_STATIC_FILE_ROOT`
+- Do NOT use `railway variables` CLI - always use the environment skill
 
 **Node.js SSR (Next.js, Nuxt, Express):**
 - Verify `start` script exists in package.json
-- If custom start needed: use `environment` skill to set `startCommand`
+- If custom start needed: invoke `environment` skill to set `startCommand`
 
 **Python (FastAPI, Django, Flask):**
 - Verify `requirements.txt` or `pyproject.toml` exists
@@ -274,7 +294,7 @@ User: "create a vite react service"
 1. Check status → linked (or init/link first)
 2. Scaffold: npm create vite@latest frontend -- --template react
 3. railway add --service frontend
-4. Configure: set RAILPACK_STATIC_FILE_ROOT=dist via environment skill
+4. No config needed (Vite dist output auto-detected)
 5. Use deploy skill: railway up
 ```
 
@@ -319,9 +339,7 @@ User: "create a static site in the frontend directory"
 1. Check: /frontend has its own package.json, no workspace config
 2. This is isolated monorepo → use root directory
 3. railway add --service frontend
-4. Configure via environment skill:
-   - rootDirectory: /frontend
-   - RAILPACK_STATIC_FILE_ROOT=dist (if Vite)
+4. Invoke environment skill to set rootDirectory: /frontend
 5. Set watch paths: /frontend/**
 ```
 
@@ -333,10 +351,7 @@ User: "add a new api package to this turborepo"
 2. This is shared monorepo → use custom commands, NOT root directory
 3. Guide: create packages/api with package.json
 4. railway add --service api
-5. Configure via environment skill:
-   - buildCommand: turbo run build --filter=api
-   - startCommand: turbo run start --filter=api
-   - (do NOT set rootDirectory)
+5. Invoke environment skill to set buildCommand and startCommand (do NOT set rootDirectory)
 6. Set watch paths: /packages/api/**, /packages/shared/**
 ```
 
@@ -346,8 +361,21 @@ User: "deploy the backend package to railway"
 
 1. Check: pnpm-workspace.yaml exists → shared monorepo
 2. railway add --service backend
-3. Configure via environment skill:
-   - buildCommand: pnpm --filter backend build
-   - startCommand: pnpm --filter backend start
+3. Invoke environment skill to set buildCommand and startCommand
 4. Set watch paths for backend + any shared deps
+```
+
+### Deploy Subdirectory of Linked Project
+```
+User: "create a vite app in my-app directory and deploy to railway"
+CWD: ~/projects/my-project/my-app (parent already linked to "my-project")
+
+1. Check status in my-app → not linked
+2. Check parent: cd .. && railway status → IS linked to "my-project"
+3. DON'T init/link the subdirectory
+4. Scaffold: bun create vite my-app --template react-ts
+5. cd my-app && bun install
+6. railway add --service my-app
+7. Invoke environment skill to set rootDirectory: /my-app
+8. Deploy from root: railway up
 ```

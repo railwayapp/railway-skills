@@ -53,6 +53,12 @@ railway up --detach --service backend
 | `-e, --environment <NAME>` | Target environment (defaults to linked) |
 | `[PATH]` | Path to deploy (defaults to current directory) |
 
+## Directory Linking
+
+Railway CLI walks UP the directory tree to find a linked project. If you're in a subdirectory of a linked project, you don't need to relink.
+
+For subdirectory deployments, prefer setting `rootDirectory` via the environment skill, then deploy normally with `railway up`.
+
 ## After Deploy
 
 ### Detach mode
