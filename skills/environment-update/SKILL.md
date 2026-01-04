@@ -1,6 +1,6 @@
 ---
 name: environment-update
-description: Update Railway environment configuration. Use when user wants to change source (Docker image, branch, root directory), build command, start command, replicas, variables, domains, health checks, or any service settings. Also use to auto-fix build/deploy errors.
+description: Update Railway environment configuration. Use when user wants to change source (Docker image, branch, root directory), build command, start command, replicas, variables, domains, health checks, delete services/volumes, or any service settings. Also use to auto-fix build/deploy errors.
 ---
 
 # Update Environment Configuration
@@ -16,6 +16,7 @@ Stage configuration changes for a Railway environment via the GraphQL API.
 - User wants to configure health checks
 - User wants to update domains or networking
 - Auto-fixing build errors detected in logs
+- User asks to delete a service, volume, or bucket
 - Any service configuration change
 
 ## Prerequisites
@@ -185,6 +186,20 @@ The `input` is an `EnvironmentConfig` object. Only include fields being changed:
 }
 ```
 
+### Delete Variables
+Set variable to `null` to delete it:
+```json
+{
+  "services": {
+    "<serviceId>": {
+      "variables": {
+        "OLD_VAR": null
+      }
+    }
+  }
+}
+```
+
 ### Set Health Check
 ```json
 {
@@ -253,6 +268,58 @@ The `input` is an `EnvironmentConfig` object. Only include fields being changed:
   }
 }
 ```
+
+### Delete Service
+```json
+{
+  "services": {
+    "<serviceId>": {
+      "isDeleted": true
+    }
+  }
+}
+```
+
+### Delete Volume
+```json
+{
+  "volumes": {
+    "<volumeId>": {
+      "isDeleted": true
+    }
+  }
+}
+```
+
+### Delete Bucket
+```json
+{
+  "buckets": {
+    "<bucketId>": {
+      "isDeleted": true
+    }
+  }
+}
+```
+
+**Note:** Deleting resources is a destructive change that requires ADMIN role.
+
+### Configure New Service Instance
+After creating a service with `service-create`, configure its instance:
+```json
+{
+  "services": {
+    "<serviceId>": {
+      "isCreated": true,
+      "source": { "image": "nginx:latest" },
+      "variables": {
+        "PORT": { "value": "8080" }
+      }
+    }
+  }
+}
+```
+**Note:** `isCreated: true` is required for new service instances.
 
 ### Enable Auto-Updates for Docker Image
 ```json
@@ -344,6 +411,12 @@ NOT just the new change (which would erase the image change):
 |-------|------|-------------|
 | `value` | string | Variable value |
 | `isOptional` | boolean | Allow empty value |
+
+### Service/Volume/Bucket Lifecycle
+| Field | Type | Description |
+|-------|------|-------------|
+| `isDeleted` | boolean | Mark resource for deletion (requires ADMIN role) |
+| `isCreated` | boolean | Mark resource as newly created |
 
 ## Error Handling
 
