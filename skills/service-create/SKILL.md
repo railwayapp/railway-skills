@@ -96,6 +96,9 @@ After creating the service, use `environment-update` skill to configure the inst
 
 **Critical:** Always include `isCreated: true` for new service instances.
 
+For variable references and service wiring, see [reference/variables.md](../reference/variables.md).
+For all config fields, see [reference/environment-config.md](../reference/environment-config.md).
+
 ## Step 3: Apply Changes
 
 Use `environment-apply` skill to commit and deploy.

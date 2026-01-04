@@ -80,6 +80,8 @@ The `config` field contains the current environment configuration:
 
 The `patch` field in `environmentStagedChanges` contains pending changes not yet deployed.
 
+For complete field reference, see [reference/environment-config.md](../reference/environment-config.md).
+
 ## Merging Config and Staged Changes
 
 The effective configuration is the base `config` merged with the staged `patch`. Present the merged result to show what will be active after next deploy.
