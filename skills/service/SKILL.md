@@ -1,19 +1,111 @@
 ---
 name: service
-description: Manage Railway services. Use when user asks about service status, wants to rename a service, change service icon, or link a service.
+description: Manage Railway services. Use when user wants to create a new service, check service status, rename a service, change service icon, or link a service. There is no CLI for creating services - use this skill.
 ---
 
 # Service Management
 
-Check service status and update service properties.
+Create services, check status, and update service properties.
 
 ## When to Use
 
+- User asks to "create a service", "add a service", "new service"
+- User wants to deploy a Docker image as a new service
+- User wants to add a GitHub repo as a new service
 - User asks about service status, health, or deployments
-- User wants to rename a service
-- User wants to change service icon
+- User wants to rename a service or change service icon
 - User asks "is my service deployed?"
 - User wants to link a different service
+
+## Create Service
+
+Create a new service via GraphQL API. There is no CLI command for this.
+
+### Get Context
+
+```bash
+railway status --json
+```
+
+Extract:
+- `project.id` - for creating the service
+- `environment.id` - for staging the instance config
+
+### Create Service Mutation
+
+```graphql
+mutation serviceCreate($input: ServiceCreateInput!) {
+  serviceCreate(input: $input) {
+    id
+    name
+  }
+}
+```
+
+### ServiceCreateInput Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `projectId` | String! | Project ID (required) |
+| `name` | String | Service name (auto-generated if omitted) |
+| `source.image` | String | Docker image (e.g., `nginx:latest`) |
+| `source.repo` | String | GitHub repo (e.g., `user/repo`) |
+| `branch` | String | Git branch for repo source |
+| `environmentId` | String | If set and is a fork, only creates in that env |
+
+### Example: Create empty service
+
+```bash
+skills/lib/railway-api.sh \
+  'mutation createService($input: ServiceCreateInput!) {
+    serviceCreate(input: $input) { id name }
+  }' \
+  '{"input": {"projectId": "PROJECT_ID"}}'
+```
+
+### Example: Create service with image
+
+```bash
+skills/lib/railway-api.sh \
+  'mutation createService($input: ServiceCreateInput!) {
+    serviceCreate(input: $input) { id name }
+  }' \
+  '{"input": {"projectId": "PROJECT_ID", "name": "my-service", "source": {"image": "nginx:latest"}}}'
+```
+
+### Example: Create service from repo
+
+```bash
+skills/lib/railway-api.sh \
+  'mutation createService($input: ServiceCreateInput!) {
+    serviceCreate(input: $input) { id name }
+  }' \
+  '{"input": {"projectId": "PROJECT_ID", "source": {"repo": "user/repo"}, "branch": "main"}}'
+```
+
+### After Creating: Configure Instance
+
+Use `environment-update` skill to configure the service instance:
+
+```json
+{
+  "services": {
+    "<serviceId>": {
+      "isCreated": true,
+      "source": { "image": "nginx:latest" },
+      "variables": {
+        "PORT": { "value": "8080" }
+      }
+    }
+  }
+}
+```
+
+**Critical:** Always include `isCreated: true` for new service instances.
+
+Then use `environment-apply` skill to deploy.
+
+For variable references, see [reference/variables.md](../reference/variables.md).
 
 ## Check Service Status
 
@@ -103,10 +195,11 @@ railway service link <service-name>
 
 ## Composability
 
-- **Create service**: Use `service-create` skill
+- **Configure service**: Use `environment-update` skill (variables, commands, image, etc.)
 - **Delete service**: Use `environment-update` skill with `isDeleted: true`
+- **Apply changes**: Use `environment-apply` skill
 - **View logs**: Use `deployment-logs` skill
-- **Deploy**: Use `deploy` skill
+- **Deploy local code**: Use `deploy` skill
 
 ## Error Handling
 
@@ -124,3 +217,12 @@ Service exists but has no deployments yet. Deploy with `railway up`.
 ```
 Service "foo" not found. Check available services with `railway status`.
 ```
+
+### Project Not Found
+User may not be in a linked project. Check `railway status`.
+
+### Permission Denied
+User needs at least DEVELOPER role to create services.
+
+### Invalid Image
+Docker image must be accessible (public or with registry credentials).

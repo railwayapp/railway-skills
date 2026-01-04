@@ -1,6 +1,6 @@
 ---
 name: environment-update
-description: Update Railway environment configuration. Use when user wants to change source (Docker image, branch, root directory), build command, start command, replicas, variables, domains, health checks, delete services/volumes, or any service settings. Also use to auto-fix build/deploy errors.
+description: Update Railway service configuration via API. Use when user wants to set variables, change Docker image, configure build/start commands, add replicas, health checks, or modify any service config. Do NOT use `railway variables` CLI - use this skill instead. For deploying a Docker image to an existing service, use this skill (not `railway up`).
 ---
 
 # Update Environment Configuration
