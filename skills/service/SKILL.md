@@ -86,7 +86,7 @@ skills/lib/railway-api.sh \
 
 ### After Creating: Configure Instance
 
-Use `environment-update` skill to configure the service instance:
+Use `environment` skill to configure the service instance:
 
 ```json
 {
@@ -104,7 +104,7 @@ Use `environment-update` skill to configure the service instance:
 
 **Critical:** Always include `isCreated: true` for new service instances.
 
-Then use `environment-apply` skill to deploy.
+Then use `environment` skill to apply and deploy.
 
 For variable references, see [reference/variables.md](../reference/variables.md).
 
@@ -197,9 +197,9 @@ railway service link <service-name>
 ## Composability
 
 - **Create service with local code**: Use `new` skill (handles scaffolding + creation)
-- **Configure service**: Use `environment-update` skill (variables, commands, image, etc.)
-- **Delete service**: Use `environment-update` skill with `isDeleted: true`
-- **Apply changes**: Use `environment-apply` skill
+- **Configure service**: Use `environment` skill (variables, commands, image, etc.)
+- **Delete service**: Use `environment` skill with `isDeleted: true`
+- **Apply changes**: Use `environment` skill
 - **View logs**: Use `deployment-logs` skill
 - **Deploy local code**: Use `deploy` skill
 

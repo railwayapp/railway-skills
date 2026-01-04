@@ -51,7 +51,7 @@ Tell user to add these records to their DNS provider.
 
 ## Read Current Domains
 
-Use `environment-config` skill to see configured domains, or query directly:
+Use `environment` skill to see configured domains, or query directly:
 
 ```graphql
 query domains($envId: String!) {
@@ -67,7 +67,7 @@ Domains are in `config.services.<serviceId>.networking`:
 
 ## Remove Domain
 
-Use `environment-update` skill to remove domains:
+Use `environment` skill to remove domains:
 
 ### Remove custom domain
 ```json
@@ -95,7 +95,7 @@ Use `environment-update` skill to remove domains:
 }
 ```
 
-Then use `environment-apply` to commit the change.
+Then use `environment` skill to apply and commit the change.
 
 ## CLI Options
 
@@ -108,9 +108,9 @@ Then use `environment-apply` to commit the change.
 
 ## Composability
 
-- **Read domains**: Use `environment-config` skill
-- **Remove domains**: Use `environment-update` skill
-- **Apply removal**: Use `environment-apply` skill
+- **Read domains**: Use `environment` skill
+- **Remove domains**: Use `environment` skill
+- **Apply removal**: Use `environment` skill
 - **Check service**: Use `service` skill
 
 ## Error Handling

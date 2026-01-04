@@ -125,7 +125,7 @@ Release build by default. Binary auto-detected from Cargo.toml.
 
 ### Preferred: Service Settings
 
-Use `environment-update` skill to set:
+Use `environment` skill to set:
 - `buildCommand` - Custom build command
 - `startCommand` - Custom start command
 
@@ -247,8 +247,8 @@ func main() {
 | Issue | Solution |
 |-------|----------|
 | Static site 404s | Set `RAILPACK_STATIC_FILE_ROOT` to actual output dir |
-| Wrong build command | Use `environment-update` to set `buildCommand` |
-| Wrong start command | Use `environment-update` to set `startCommand` |
+| Wrong build command | Use `environment` skill to set `buildCommand` |
+| Wrong start command | Use `environment` skill to set `startCommand` |
 | Missing system package | Add to `RAILPACK_BUILD_APT_PACKAGES` or `RAILPACK_DEPLOY_APT_PACKAGES` |
 | Wrong Node version | Set `RAILPACK_NODE_VERSION` or add `.nvmrc` |
 | Wrong Python version | Set `RAILPACK_PYTHON_VERSION` or add `.python-version` |

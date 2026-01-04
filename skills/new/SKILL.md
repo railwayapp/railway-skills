@@ -135,11 +135,11 @@ Reference [monorepo.md](../reference/monorepo.md) for monorepo patterns.
 **Static site (Vite, CRA, Astro static):**
 - If output is `dist/`: set `RAILPACK_STATIC_FILE_ROOT=dist`
 - If output is `build/`: set `RAILPACK_STATIC_FILE_ROOT=build`
-- Use `environment-update` skill to set the variable
+- Use `environment` skill to set the variable
 
 **Node.js SSR (Next.js, Nuxt, Express):**
 - Verify `start` script exists in package.json
-- If custom start needed: use `environment-update` to set `startCommand`
+- If custom start needed: use `environment` skill to set `startCommand`
 
 **Python (FastAPI, Django, Flask):**
 - Verify `requirements.txt` or `pyproject.toml` exists
@@ -214,7 +214,7 @@ npm create astro@latest
 ## Composability
 
 - **After service created**: Use `deploy` skill to push code
-- **For advanced config**: Use `environment-update` skill (buildCommand, startCommand)
+- **For advanced config**: Use `environment` skill (buildCommand, startCommand)
 - **For domains**: Use `domain` skill
 - **For status checks**: Use `status` skill
 - **For service operations** (rename, delete, status): Use `service` skill
@@ -274,7 +274,7 @@ User: "create a vite react service"
 1. Check status → linked (or init/link first)
 2. Scaffold: npm create vite@latest frontend -- --template react
 3. railway add --service frontend
-4. Configure: set RAILPACK_STATIC_FILE_ROOT=dist via environment-update
+4. Configure: set RAILPACK_STATIC_FILE_ROOT=dist via environment skill
 5. Use deploy skill: railway up
 ```
 
@@ -319,7 +319,7 @@ User: "create a static site in the frontend directory"
 1. Check: /frontend has its own package.json, no workspace config
 2. This is isolated monorepo → use root directory
 3. railway add --service frontend
-4. Configure via environment-update:
+4. Configure via environment skill:
    - rootDirectory: /frontend
    - RAILPACK_STATIC_FILE_ROOT=dist (if Vite)
 5. Set watch paths: /frontend/**
@@ -333,7 +333,7 @@ User: "add a new api package to this turborepo"
 2. This is shared monorepo → use custom commands, NOT root directory
 3. Guide: create packages/api with package.json
 4. railway add --service api
-5. Configure via environment-update:
+5. Configure via environment skill:
    - buildCommand: turbo run build --filter=api
    - startCommand: turbo run start --filter=api
    - (do NOT set rootDirectory)
@@ -346,7 +346,7 @@ User: "deploy the backend package to railway"
 
 1. Check: pnpm-workspace.yaml exists → shared monorepo
 2. railway add --service backend
-3. Configure via environment-update:
+3. Configure via environment skill:
    - buildCommand: pnpm --filter backend build
    - startCommand: pnpm --filter backend start
 4. Set watch paths for backend + any shared deps

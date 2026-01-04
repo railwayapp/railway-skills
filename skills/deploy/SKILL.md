@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy local code to Railway using `railway up`. Use when user wants to deploy code from the current directory. For deploying a Docker image (not local code), use environment-update skill instead - there is no `railway up --image` flag.
+description: Deploy local code to Railway using `railway up`. Use when user wants to deploy code from the current directory. For deploying a Docker image (not local code), use environment skill instead - there is no `railway up --image` flag.
 ---
 
 # Deploy
@@ -71,8 +71,8 @@ more context, use `deployment-logs` skill with `--lines` flag (never stream).
 
 - **Check status after deploy**: Use `service` skill
 - **View logs**: Use `deployment-logs` skill
-- **Fix config issues**: Use `environment-update` skill
-- **Redeploy after config fix**: Use `environment-apply` skill
+- **Fix config issues**: Use `environment` skill
+- **Redeploy after config fix**: Use `environment` skill
 
 ## Error Handling
 
@@ -92,5 +92,5 @@ Do NOT run `railway logs` after CI mode (it streams forever without `--lines`).
 
 Common issues:
 - Missing dependencies → check package.json/requirements.txt
-- Build command wrong → use environment-update to fix
+- Build command wrong → use environment skill to fix
 - Dockerfile issues → check dockerfile path
