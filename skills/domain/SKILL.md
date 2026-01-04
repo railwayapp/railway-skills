@@ -111,7 +111,7 @@ Then use `environment-apply` to commit the change.
 - **Read domains**: Use `environment-config` skill
 - **Remove domains**: Use `environment-update` skill
 - **Apply removal**: Use `environment-apply` skill
-- **Check service**: Use `service-status` skill
+- **Check service**: Use `service` skill
 
 ## Error Handling
 

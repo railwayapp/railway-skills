@@ -69,7 +69,7 @@ more context, use `deployment-logs` skill with `--lines` flag (never stream).
 
 ## Composability
 
-- **Check status after deploy**: Use `service-status` skill
+- **Check status after deploy**: Use `service` skill
 - **View logs**: Use `deployment-logs` skill
 - **Fix config issues**: Use `environment-update` skill
 - **Redeploy after config fix**: Use `environment-apply` skill
