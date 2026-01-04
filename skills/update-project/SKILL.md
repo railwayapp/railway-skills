@@ -17,9 +17,13 @@ Extract the `id` field from the response.
 
 ## Making the API Call
 
-Use the railway-api.sh helper to make GraphQL requests:
+Use the railway-api.sh helper with query and variables:
 ```bash
-/path/to/skills/lib/railway-api.sh 'mutation { projectUpdate(id: "PROJECT_ID", input: { FIELD: VALUE }) { FIELD } }'
+skills/lib/railway-api.sh \
+  'mutation updateProject($id: String!, $input: ProjectUpdateInput!) {
+    projectUpdate(id: $id, input: $input) { name }
+  }' \
+  '{"id": "PROJECT_ID", "input": {"name": "new-name"}}'
 ```
 
 ## Available Fields (ProjectUpdateInput)
@@ -34,29 +38,37 @@ Use the railway-api.sh helper to make GraphQL requests:
 
 ## Examples
 
+All examples use the same mutation with different variables:
+
+```graphql
+mutation updateProject($id: String!, $input: ProjectUpdateInput!) {
+  projectUpdate(id: $id, input: $input) { name prDeploys isPublic botPrEnvironments }
+}
+```
+
 **Change project name:**
 ```bash
-railway-api.sh 'mutation { projectUpdate(id: "uuid", input: { name: "new-name" }) { name } }'
+skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name"}}'
 ```
 
 **Enable PR deploys:**
 ```bash
-railway-api.sh 'mutation { projectUpdate(id: "uuid", input: { prDeploys: true }) { prDeploys } }'
+skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"prDeploys": true}}'
 ```
 
 **Enable bot PR environments (Dependabot, Renovate):**
 ```bash
-railway-api.sh 'mutation { projectUpdate(id: "uuid", input: { botPrEnvironments: true }) { botPrEnvironments } }'
+skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"botPrEnvironments": true}}'
 ```
 
 **Make project public:**
 ```bash
-railway-api.sh 'mutation { projectUpdate(id: "uuid", input: { isPublic: true }) { isPublic } }'
+skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"isPublic": true}}'
 ```
 
 **Multiple fields at once:**
 ```bash
-railway-api.sh 'mutation { projectUpdate(id: "uuid", input: { name: "new-name", prDeploys: true }) { name prDeploys } }'
+skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name", "prDeploys": true}}'
 ```
 
 ## Error Handling

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Railway GraphQL API helper
-# Usage: railway-api.sh '<graphql-query>'
+# Usage: railway-api.sh '<graphql-query>' ['<variables-json>']
 
 set -e
 
@@ -28,8 +28,12 @@ if [[ -z "$1" ]]; then
   exit 1
 fi
 
-# Use jq to properly escape the query for JSON
-PAYLOAD=$(jq -n --arg q "$1" '{query: $q}')
+# Build payload with query and optional variables
+if [[ -n "$2" ]]; then
+  PAYLOAD=$(jq -n --arg q "$1" --argjson v "$2" '{query: $q, variables: $v}')
+else
+  PAYLOAD=$(jq -n --arg q "$1" '{query: $q}')
+fi
 
 curl -s https://backboard.railway.com/graphql/v2 \
   -H "Authorization: Bearer $TOKEN" \

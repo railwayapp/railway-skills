@@ -27,8 +27,20 @@ available in CLI.
 
 Token location: `~/.railway/config.json` → `user.token`
 
-Use `skills/lib/railway-api.sh '<graphql-query>'` to make authenticated
-requests. This helper reads the token and handles auth headers.
+Use `skills/lib/railway-api.sh '<query>' '<variables-json>'` to make
+authenticated requests. This helper reads the token and handles auth headers.
+
+```bash
+# Query with variables
+skills/lib/railway-api.sh \
+  'query getEnv($id: String!) { environment(id: $id) { name } }' \
+  '{"id": "env-uuid"}'
+
+# Mutation with variables
+skills/lib/railway-api.sh \
+  'mutation update($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { name } }' \
+  '{"id": "proj-uuid", "input": {"name": "new-name"}}'
+```
 
 API docs: https://docs.railway.com/api/llms-docs.md
 
