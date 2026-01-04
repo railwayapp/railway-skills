@@ -364,10 +364,33 @@ The API will return validation errors for invalid configs. Common issues:
 You don't have permission to modify this environment. Check your Railway role.
 ```
 
-## After Staging
+## After Staging: Auto-Apply
 
-Changes are staged, not deployed. Tell the user:
+By default, **apply changes immediately** after staging using the `environment-apply`
+skill. This triggers a deployment.
+
+### When to Auto-Apply (default)
+- User makes a single configuration change
+- No preexisting staged changes before this update
+- User doesn't explicitly ask to "just stage" or "stage without deploying"
+
+### When NOT to Auto-Apply
+- There were preexisting staged changes (user may be batching changes)
+- User explicitly says "stage only", "don't deploy yet", or similar
+- Making multiple related changes that should be batched
+
+### Flow
+1. Check for preexisting staged changes before making updates
+2. Stage the new changes
+3. If no preexisting changes → call `environment-apply` to commit and deploy
+4. If preexisting changes → inform user changes are staged, ask if they want to apply
+
+### After Auto-Apply
 ```
-Changes staged successfully. They will apply on next deploy.
-To deploy now, run `railway up` or push to the linked GitHub repo.
+Changes applied and deploying.
+```
+
+### After Stage-Only
+```
+Changes staged. Run environment-apply or say "apply changes" to deploy.
 ```
