@@ -49,7 +49,7 @@ Only include fields being changed. The patch is merged with existing config.
 | Field | Type | Description |
 |-------|------|-------------|
 | `startCommand` | string | Container start command |
-| `numReplicas` | number | Number of instances (1-200) |
+| `multiRegionConfig` | object | Region → replica config. See [Multi-Region Config](#multi-region-config). |
 | `healthcheckPath` | string | Health check endpoint |
 | `healthcheckTimeout` | number | Seconds to wait for health |
 | `restartPolicyType` | ON_FAILURE \| ALWAYS \| NEVER | Restart behavior |
@@ -73,6 +73,37 @@ For variable references, see [variables.md](variables.md).
 | `isDeleted` | boolean | Mark for deletion (requires ADMIN) |
 | `isCreated` | boolean | Mark as newly created |
 
+## Multi-Region Config
+
+Controls replica count per region. Structure: region name → `{ numReplicas }` or `null` to remove.
+
+```json
+{
+  "multiRegionConfig": {
+    "us-west2": { "numReplicas": 3 },
+    "europe-west4-drams3a": { "numReplicas": 2 }
+  }
+}
+```
+
+### Available Regions
+
+| Name | Location | Aliases |
+|------|----------|---------|
+| `us-west2` | US West (California) | "us west", "california" |
+| `us-east4-eqdc4a` | US East (Virginia) | "us east", "virginia" |
+| `europe-west4-drams3a` | EU West (Amsterdam) | "europe", "eu", "amsterdam" |
+| `asia-southeast1-eqsg3a` | Southeast Asia (Singapore) | "asia", "singapore" |
+
+### Interpreting User Requests
+
+- "add 3 replicas to europe" → `{ "europe-west4-drams3a": { "numReplicas": 3 } }`
+- "add a replica to all regions" → set `numReplicas: 1` for all 4 regions
+- "remove from asia" → `{ "asia-southeast1-eqsg3a": null }`
+- "increase replicas to 5" (no region specified) → query current config first, update existing region(s)
+
+**Important:** When user doesn't specify a region, query the current `multiRegionConfig` and modify the existing region(s). Don't assume a default region.
+
 ## Common Operations
 
 ### Set Build Command
@@ -87,7 +118,7 @@ For variable references, see [variables.md](variables.md).
 
 ### Set Replicas
 ```json
-{ "services": { "<serviceId>": { "deploy": { "numReplicas": 3 } } } }
+{ "services": { "<serviceId>": { "deploy": { "multiRegionConfig": { "us-west2": { "numReplicas": 3 } } } } } }
 ```
 
 ### Add Variables
