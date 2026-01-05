@@ -1,6 +1,6 @@
 ---
 name: environment
-description: Manage Railway environment configuration. Use when user wants to check config, set variables, change build/start commands, update replicas, configure health checks, change Docker image, or apply/deploy staged changes. Do NOT use `railway variables` CLI - use this skill instead.
+description: Manage Railway environment configuration. Use when user wants to check config, set variables, change build/start commands, update replicas, configure health checks, change Docker image, delete services/volumes/buckets, or apply/deploy staged changes. Do NOT use `railway variables` CLI - use this skill instead.
 ---
 
 # Environment Configuration
@@ -174,6 +174,8 @@ skills/lib/railway-api.sh \
 
 Commit staged changes and trigger deployments.
 
+**Note:** There is no `railway apply` CLI command. Use the mutation below or direct users to the web UI.
+
 ### Apply Mutation
 
 **Mutation name: `environmentPatchCommitStaged`**
@@ -233,6 +235,12 @@ By default, **apply changes immediately** after staging.
 - There were preexisting staged changes (user may be batching changes)
 - User explicitly says "stage only", "don't deploy yet", or similar
 - Making multiple related changes that should be batched
+
+**When you don't auto-apply, tell the user:**
+> Changes staged. Apply them at: https://railway.com/project/{projectId}
+> Or ask me to apply them.
+
+Get `projectId` from `railway status --json` → `project.id`
 
 ### Flow
 1. Check for preexisting staged changes before making updates

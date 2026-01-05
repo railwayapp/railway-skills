@@ -10,8 +10,8 @@ Create Railway projects and services with proper configuration.
 
 ## When to Use
 
-- User says "deploy to railway" but no project is linked
-- User says "create a railway project", "init", "new project"
+- User says "deploy to railway" (add service if linked, init if not)
+- User says "create a railway project", "init", "new project" (explicit new project)
 - User says "link to railway", "connect to railway"
 - User says "create a service", "add a backend", "new api service"
 - User says "create a vite app", "create a react website", "make a python api"
@@ -84,8 +84,26 @@ Ready to deploy
 railway status --json
 ```
 
-- **If linked**: Skip to service creation if user wants to add a service
+- **If linked**: Add a service to the existing project (see below)
 - **If not linked**: Check if a PARENT directory is linked (see below)
+
+### When Already Linked
+
+**Default behavior**: "deploy to railway" = add a service to the linked project.
+
+Do NOT create a new project unless user EXPLICITLY says:
+- "new project", "create a project", "init a project"
+- "separate project", "different project"
+
+App names like "flappy-bird" or "my-api" are SERVICE names, not project names.
+
+```
+User: "create a vite app called foo and deploy to railway"
+Project: Already linked to "my-project"
+
+WRONG: railway init -n foo
+RIGHT: railway add --service foo
+```
 
 ### Parent Directory Linking
 
@@ -103,6 +121,10 @@ cd .. && railway status --json
 **If no parent is linked**, proceed with init or link flow.
 
 ## Init vs Link Decision
+
+**Skip this section if already linked** - just add a service instead.
+
+Only use this section when NO project is linked (directly or via parent).
 
 ### Check User's Projects
 ```bash
