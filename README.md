@@ -2,6 +2,12 @@
 
 Claude Code plugin for [Railway](https://railway.com). Manage your Railway projects directly from Claude Code.
 
+## Development
+
+```bash
+claude --plugin-dir ~/dev/railway/railway-claude-plugin --dangerously-skip-permissions
+```
+
 ## Installation
 
 ```bash
