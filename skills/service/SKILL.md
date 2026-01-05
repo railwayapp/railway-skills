@@ -58,7 +58,7 @@ mutation serviceCreate($input: ServiceCreateInput!) {
 ### Example: Create empty service
 
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation createService($input: ServiceCreateInput!) {
     serviceCreate(input: $input) { id name }
   }' \
@@ -68,7 +68,7 @@ skills/lib/railway-api.sh \
 ### Example: Create service with image
 
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation createService($input: ServiceCreateInput!) {
     serviceCreate(input: $input) { id name }
   }' \
@@ -156,7 +156,7 @@ Extract `service.id` from the response.
 ### Update Name
 
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation updateService($id: String!, $input: ServiceUpdateInput!) {
     serviceUpdate(id: $id, input: $input) { id name }
   }' \
@@ -166,7 +166,7 @@ skills/lib/railway-api.sh \
 ### Update Icon
 
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation updateService($id: String!, $input: ServiceUpdateInput!) {
     serviceUpdate(id: $id, input: $input) { id icon }
   }' \

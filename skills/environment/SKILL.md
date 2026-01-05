@@ -79,7 +79,7 @@ query environmentConfig($environmentId: String!) {
 
 Example:
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query envConfig($envId: String!) {
     environment(id: $envId) { id config(decryptVariables: false) }
     environmentStagedChanges(environmentId: $envId) { id patch(decryptVariables: false) }
@@ -97,7 +97,7 @@ The `config` field contains current configuration:
     "<serviceId>": {
       "source": { "repo": "...", "branch": "main" },
       "build": { "buildCommand": "npm run build", "builder": "NIXPACKS" },
-      "deploy": { "startCommand": "npm start", "numReplicas": 1 },
+      "deploy": { "startCommand": "npm start", "multiRegionConfig": { "us-west2": { "numReplicas": 1 } } },
       "variables": { "NODE_ENV": { "value": "production" } },
       "networking": { "serviceDomains": {}, "customDomains": {} }
     }
@@ -119,7 +119,7 @@ Stage configuration changes via the `environmentStageChanges` mutation.
 The mutation **replaces** all staged changes, it does not merge. You MUST fetch existing staged changes and merge before calling the mutation.
 
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query staged($envId: String!) {
     environmentStagedChanges(environmentId: $envId) { patch(decryptVariables: false) }
   }' \
@@ -140,7 +140,7 @@ mutation stageEnvironmentChanges($environmentId: String!, $input: EnvironmentCon
 
 Example:
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!) {
     environmentStageChanges(environmentId: $environmentId, input: $input) { id }
   }' \
@@ -165,7 +165,7 @@ NOT just the new change (which would erase the image change).
 
 Use `isDeleted: true`:
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!) {
     environmentStageChanges(environmentId: $environmentId, input: $input) { id }
   }' \
@@ -194,7 +194,7 @@ mutation environmentPatchCommitStaged($environmentId: String!, $message: String,
 
 Example:
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation commitStaged($environmentId: String!, $message: String) {
     environmentPatchCommitStaged(environmentId: $environmentId, commitMessage: $message)
   }' \

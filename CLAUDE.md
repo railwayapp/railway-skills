@@ -27,17 +27,17 @@ available in CLI.
 
 Token location: `~/.railway/config.json` → `user.token`
 
-Use `skills/lib/railway-api.sh '<query>' '<variables-json>'` to make
+Use `${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<query>' '<variables-json>'` to make
 authenticated requests. This helper reads the token and handles auth headers.
 
 ```bash
 # Query with variables
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query getEnv($id: String!) { environment(id: $id) { name } }' \
   '{"id": "env-uuid"}'
 
 # Mutation with variables
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation update($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { name } }' \
   '{"id": "proj-uuid", "input": {"name": "new-name"}}'
 ```

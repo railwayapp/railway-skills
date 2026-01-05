@@ -19,7 +19,7 @@ Extract the `id` field from the response.
 
 Use the railway-api.sh helper with query and variables:
 ```bash
-skills/lib/railway-api.sh \
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation updateProject($id: String!, $input: ProjectUpdateInput!) {
     projectUpdate(id: $id, input: $input) { name }
   }' \
@@ -48,27 +48,27 @@ mutation updateProject($id: String!, $input: ProjectUpdateInput!) {
 
 **Change project name:**
 ```bash
-skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name"}}'
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name"}}'
 ```
 
 **Enable PR deploys:**
 ```bash
-skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"prDeploys": true}}'
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"prDeploys": true}}'
 ```
 
 **Enable bot PR environments (Dependabot, Renovate):**
 ```bash
-skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"botPrEnvironments": true}}'
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"botPrEnvironments": true}}'
 ```
 
 **Make project public:**
 ```bash
-skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"isPublic": true}}'
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"isPublic": true}}'
 ```
 
 **Multiple fields at once:**
 ```bash
-skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name", "prDeploys": true}}'
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name", "prDeploys": true}}'
 ```
 
 ## Error Handling
