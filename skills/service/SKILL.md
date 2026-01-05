@@ -1,6 +1,6 @@
 ---
 name: service
-description: Manage existing Railway services. Use for checking service status, renaming services, changing icons, linking services, or advanced service creation (Docker images, GitHub repos). For creating services with local code, prefer the `new` skill.
+description: Manage existing Railway services. Use for checking service status, renaming services, changing icons, linking services, or advanced service creation (Docker images). For creating services with local code, prefer the `new` skill. For GitHub repo sources, use `new` skill to create empty service then `environment` skill to configure source.
 ---
 
 # Service Management
@@ -14,9 +14,10 @@ Check status, update properties, and advanced service creation.
 - User wants to rename a service or change service icon
 - User wants to link a different service
 - User wants to deploy a Docker image as a new service (advanced)
-- User wants to add a GitHub repo as a new service (advanced)
 
 **Note:** For creating services with local code (the common case), prefer the `new` skill which handles project setup, scaffolding, and service creation together.
+
+**For GitHub repo sources:** Use `new` skill to create empty service, then `environment` skill to configure source.repo via staged changes API.
 
 ## Create Service
 
@@ -74,15 +75,14 @@ skills/lib/railway-api.sh \
   '{"input": {"projectId": "PROJECT_ID", "name": "my-service", "source": {"image": "nginx:latest"}}}'
 ```
 
-### Example: Create service from repo
+### Connecting a GitHub Repo
 
-```bash
-skills/lib/railway-api.sh \
-  'mutation createService($input: ServiceCreateInput!) {
-    serviceCreate(input: $input) { id name }
-  }' \
-  '{"input": {"projectId": "PROJECT_ID", "source": {"repo": "user/repo"}, "branch": "main"}}'
-```
+**Do NOT use serviceCreate with source.repo** - use staged changes API instead.
+
+Flow:
+1. Create empty service: `serviceCreate(input: {projectId: "...", name: "my-service"})`
+2. Use `environment` skill to configure source via staged changes API
+3. Apply to trigger deployment
 
 ### After Creating: Configure Instance
 

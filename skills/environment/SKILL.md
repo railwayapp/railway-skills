@@ -1,6 +1,6 @@
 ---
 name: environment
-description: Manage Railway environment configuration. Use when user wants to check config, set variables, change build/start commands, update replicas, configure health checks, change Docker image, delete services/volumes/buckets, or apply/deploy staged changes. Do NOT use `railway variables` CLI - use this skill instead.
+description: Manage Railway environment configuration. Use when user wants to check config, set variables, change build/start commands, update replicas, configure health checks, change Docker image, connect GitHub repos, delete services/volumes/buckets, or apply/deploy staged changes. Do NOT use `railway variables` CLI - use this skill instead.
 ---
 
 # Environment Configuration
@@ -11,6 +11,8 @@ Query, stage, and apply configuration changes for Railway environments.
 
 - User asks about current build/deploy settings, variables, replicas, health checks, domains
 - User asks to change service source (Docker image, branch, commit, root directory)
+- User wants to connect a service to a GitHub repo
+- User wants to deploy from a GitHub repo (create empty service first via `new` skill, then use this)
 - User asks to change build or start command
 - User wants to add/update/delete environment variables
 - User wants to change replica count or configure health checks

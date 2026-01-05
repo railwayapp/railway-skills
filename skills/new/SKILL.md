@@ -1,6 +1,6 @@
 ---
 name: new
-description: Create Railway projects and services. Use when user wants to deploy to Railway, create a new project, link to existing project, create a new service, or set up code to work on Railway. Handles "create a vite app", "add a backend service", "init a new project", etc.
+description: Create Railway projects and services. Use when user wants to deploy to Railway, create a new project, link to existing project, create a new service, deploy from a GitHub repo, or set up code to work on Railway. Handles "create a vite app", "add a backend service", "init a new project", "deploy from github.com/user/repo", etc.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*)
 ---
 
@@ -15,6 +15,7 @@ Create Railway projects and services with proper configuration.
 - User says "link to railway", "connect to railway"
 - User says "create a service", "add a backend", "new api service"
 - User says "create a vite app", "create a react website", "make a python api"
+- User says "deploy from github.com/user/repo", "create service from this repo"
 - Setting up code + Railway service together
 
 ## Prerequisites
@@ -168,6 +169,13 @@ After project is linked, create a service:
 ```bash
 railway add --service <name>
 ```
+
+**For GitHub repo sources**: Create an empty service, then invoke the `environment` skill to configure the source via staged changes API. Do NOT use `railway add --repo` - it requires GitHub app integration which often fails.
+
+Flow:
+1. `railway add --service my-api`
+2. Invoke `environment` skill to set `source.repo` and `source.branch`
+3. Apply changes to trigger deployment
 
 ### Configure Based on Project Type
 

@@ -110,6 +110,11 @@ For variable references, see [variables.md](variables.md).
 { "services": { "<serviceId>": { "source": { "image": "nginx:latest" } } } }
 ```
 
+### Connect GitHub Repo
+```json
+{ "services": { "<serviceId>": { "source": { "repo": "owner/repo", "branch": "main" } } } }
+```
+
 ### Change Git Branch
 ```json
 { "services": { "<serviceId>": { "source": { "branch": "develop" } } } }
