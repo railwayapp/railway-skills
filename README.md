@@ -18,13 +18,13 @@ claude plugin add railwayapp/railway-claude-plugin
 | Skill | Description |
 |-------|-------------|
 | `status` | Check linked project and environment |
-| `service` | Create, update, and check service status |
+| `new` | Create projects and services, link existing projects |
+| `service` | Manage existing services (rename, icons, status) |
 | `deploy` | Deploy local code with `railway up` |
 | `domain` | Add and manage service domains |
-| `environment-config` | View environment configuration |
-| `environment-update` | Update service config (variables, image, commands) |
-| `environment-apply` | Apply staged changes and deploy |
+| `environment` | Manage config (variables, commands, replicas, health checks) |
 | `deployment-logs` | View build and runtime logs |
+| `update-project` | Update project settings (name, PR deploys, visibility) |
 
 ## Usage
 
