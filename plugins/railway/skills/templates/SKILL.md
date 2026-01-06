@@ -1,6 +1,7 @@
 ---
 name: templates
 description: Search, browse, and deploy Railway templates. Use when user wants to add a service from a template, find templates for a specific use case, deploy a database (Postgres, Redis, MySQL, MongoDB), or add tools like Ghost, Strapi, n8n, Minio, etc.
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh:*), Bash(railway:*)
 ---
 
 # Templates
