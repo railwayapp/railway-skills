@@ -165,11 +165,10 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 
 ### Update Icon
 
-Icons can be emojis, image URLs, or animated GIFs.
+Icons can be image URLs or animated GIFs.
 
 | Type | Example |
 |------|---------|
-| Emoji | `"icon": "🚀"` |
 | Image URL | `"icon": "https://example.com/logo.png"` |
 | Animated GIF | `"icon": "https://example.com/animated.gif"` |
 | Devicons | `"icon": "https://devicons.railway.app/github"` |
