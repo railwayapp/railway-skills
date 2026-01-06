@@ -1,7 +1,11 @@
 {
   "name": "railway",
+  "version": "1.0.0",
   "description": "Railway tools for Claude Code",
   "author": {
-    "name": "Railway"
-  }
+    "name": "Railway",
+    "email": "contact@railway.com"
+  },
+  "repository": "https://github.com/railwayapp/railway-claude-plugin",
+  "license": "MIT"
 }
