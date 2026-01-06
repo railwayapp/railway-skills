@@ -48,7 +48,10 @@ Copy `plugins/railway/skills/` to your agent's skills location, or reference the
 | [templates](plugins/railway/skills/templates/SKILL.md) | Deploy from marketplace |
 | [metrics](plugins/railway/skills/metrics/SKILL.md) | Query resource usage |
 | [update-project](plugins/railway/skills/update-project/SKILL.md) | Update project settings |
-| [hello](plugins/railway/skills/hello/SKILL.md) | Greeting with dad jokes |
+
+## Hooks
+
+This plugin includes a PreToolUse hook that auto-approves `railway-api.sh` calls to avoid permission prompts on every GraphQL API request.
 
 ## Repository Structure
 
@@ -60,6 +63,9 @@ railway-claude-plugin/
 │   └── railway/
 │       ├── .claude-plugin/
 │       │   └── plugin.json
+│       ├── hooks/
+│       │   ├── hooks.json
+│       │   └── auto-approve-api.sh
 │       └── skills/
 │           ├── lib/
 │           ├── reference/
