@@ -15,10 +15,10 @@ claude plugin install railway@railway-claude-plugin
 
 ```bash
 git clone git@github.com:railwayapp/railway-claude-plugin.git ~/railway-claude-plugin
-claude plugin install ~/railway-claude-plugin
+claude --plugin-dir ~/railway-claude-plugin/plugins/railway
 ```
 
-After installation, restart Claude Code. Skills are invoked automatically when relevant.
+Skills are invoked automatically when relevant.
 
 ### Updating
 
