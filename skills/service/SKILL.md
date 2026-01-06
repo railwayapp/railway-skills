@@ -165,12 +165,23 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 
 ### Update Icon
 
+Icons can be emojis, image URLs, or animated GIFs.
+
+| Type | Example |
+|------|---------|
+| Emoji | `"icon": "🚀"` |
+| Image URL | `"icon": "https://example.com/logo.png"` |
+| Animated GIF | `"icon": "https://example.com/animated.gif"` |
+| Devicons | `"icon": "https://devicons.railway.app/github"` |
+
+**Railway Devicons:** Query `https://devicons.railway.app/{query}` for common developer icons (e.g., `github`, `postgres`, `redis`, `nodejs`). Browse all at https://devicons.railway.app
+
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation updateService($id: String!, $input: ServiceUpdateInput!) {
     serviceUpdate(id: $id, input: $input) { id icon }
   }' \
-  '{"id": "SERVICE_ID", "input": {"icon": "🚀"}}'
+  '{"id": "SERVICE_ID", "input": {"icon": "https://devicons.railway.app/github"}}'
 ```
 
 ### ServiceUpdateInput Fields
@@ -178,7 +189,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | String | Service name |
-| `icon` | String | Service icon (emoji) |
+| `icon` | String | Emoji or image URL (including animated GIFs) |
 
 ## Link Service
 
