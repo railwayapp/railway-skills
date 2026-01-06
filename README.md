@@ -1,46 +1,97 @@
-# Railway Claude Plugin
+# Railway Skills
 
-Claude Code plugin for [Railway](https://railway.com). Manage your Railway projects directly from Claude Code.
-
-## Development
-
-```bash
-claude --plugin-dir ~/dev/railway/railway-claude-plugin --dangerously-skip-permissions
-```
+Agent skills for [Railway](https://railway.com), following the [Agent Skills](https://agentskills.io) open format.
 
 ## Installation
 
+### Claude Code (via Marketplace)
+
 ```bash
-claude plugin add railwayapp/railway-claude-plugin
+claude plugin marketplace add railwayapp/railway-claude-plugin
+claude plugin install railway@railway-claude-plugin
 ```
 
-## Requirements
+### Claude Code (from local clone)
 
-- [Railway CLI](https://docs.railway.com/guides/cli) installed and authenticated
-- A linked Railway project (`railway link`)
+```bash
+git clone git@github.com:railwayapp/railway-claude-plugin.git ~/railway-claude-plugin
+claude plugin install ~/railway-claude-plugin/plugins/railway
+```
 
-## Skills
+After installation, restart Claude Code. Skills are invoked automatically when relevant.
+
+### Updating
+
+```bash
+claude plugin marketplace update
+claude plugin update railway@railway-claude-plugin
+```
+
+Or use `/plugin` to open the interactive plugin manager.
+
+### Other Agents
+
+Copy `plugins/railway/skills/` to your agent's skills location, or reference the SKILL.md files directly.
+
+## Available Skills
 
 | Skill | Description |
 |-------|-------------|
-| `status` | Check linked project and environment |
-| `new` | Create projects and services, link existing projects |
-| `service` | Manage existing services (rename, icons, status) |
-| `deploy` | Deploy local code with `railway up` |
-| `domain` | Add and manage service domains |
-| `environment` | Manage config (variables, commands, replicas, health checks) |
-| `deployment-logs` | View build and runtime logs |
-| `update-project` | Update project settings (name, PR deploys, visibility) |
+| [status](plugins/railway/skills/status/SKILL.md) | Check Railway project status |
+| [new](plugins/railway/skills/new/SKILL.md) | Create projects, services, databases |
+| [service](plugins/railway/skills/service/SKILL.md) | Manage existing services |
+| [deploy](plugins/railway/skills/deploy/SKILL.md) | Deploy local code |
+| [domain](plugins/railway/skills/domain/SKILL.md) | Manage service domains |
+| [environment](plugins/railway/skills/environment/SKILL.md) | Manage config (vars, commands, replicas) |
+| [deployment-logs](plugins/railway/skills/deployment-logs/SKILL.md) | View build and runtime logs |
+| [database](plugins/railway/skills/database/SKILL.md) | Add Railway databases |
+| [templates](plugins/railway/skills/templates/SKILL.md) | Deploy from marketplace |
+| [metrics](plugins/railway/skills/metrics/SKILL.md) | Query resource usage |
+| [update-project](plugins/railway/skills/update-project/SKILL.md) | Update project settings |
+| [hello](plugins/railway/skills/hello/SKILL.md) | Greeting with dad jokes |
 
-## Usage
+## Repository Structure
 
-Skills are invoked automatically based on your request:
+```
+railway-claude-plugin/
+├── .claude-plugin/
+│   └── marketplace.json
+├── plugins/
+│   └── railway/
+│       ├── .claude-plugin/
+│       │   └── plugin.json
+│       └── skills/
+│           ├── lib/
+│           ├── reference/
+│           └── {skill-name}/SKILL.md
+├── AGENTS.md
+├── CLAUDE.md → AGENTS.md
+└── README.md
+```
 
-- "create a new service called api"
-- "deploy this to railway"
-- "add a domain to my service"
-- "set the PORT variable to 8080"
-- "check the deployment status"
+## Creating New Skills
+
+Create `plugins/railway/skills/{name}/SKILL.md`:
+
+```yaml
+---
+name: my-skill
+description: What this skill does and when to use it
+---
+
+# Instructions
+
+Step-by-step guidance for the agent.
+
+## Examples
+
+Concrete examples showing expected input/output.
+```
+
+## References
+
+- [Agent Skills Specification](https://agentskills.io/specification)
+- [Railway Docs](https://docs.railway.com)
 
 ## License
 
