@@ -94,30 +94,55 @@ Use when: Browser makes requests to API (browser can't access private network)
 ### Service → Database (private network)
 Use when: Backend connects to database (faster, no egress cost, more secure)
 
+Railway databases auto-generate connection URL variables. Use the private versions:
+
+| Database | Variable Reference |
+|----------|-------------------|
+| Postgres | `${{Postgres.DATABASE_PRIVATE_URL}}` |
+| MySQL | `${{MySQL.DATABASE_PRIVATE_URL}}` |
+| Redis | `${{Redis.REDIS_PRIVATE_URL}}` |
+| Mongo | `${{Mongo.MONGO_PRIVATE_URL}}` |
+
+**Postgres/MySQL example:**
 ```json
 {
   "services": {
     "<apiId>": {
       "variables": {
-        "DATABASE_URL": { "value": "postgres://user:pass@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/railway" }
+        "DATABASE_URL": { "value": "${{Postgres.DATABASE_PRIVATE_URL}}" }
       }
     }
   }
 }
 ```
 
-### Service → Redis (private network)
+**Redis example:**
 ```json
 {
   "services": {
     "<apiId>": {
       "variables": {
-        "REDIS_URL": { "value": "redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379" }
+        "REDIS_URL": { "value": "${{Redis.REDIS_PRIVATE_URL}}" }
       }
     }
   }
 }
 ```
+
+**Mongo example:**
+```json
+{
+  "services": {
+    "<apiId>": {
+      "variables": {
+        "MONGO_URL": { "value": "${{Mongo.MONGO_PRIVATE_URL}}" }
+      }
+    }
+  }
+}
+```
+
+**Note:** Service names are case-sensitive. Match the exact name from your project (e.g., "Postgres", "Redis").
 
 ### Service → Service (private network)
 Use when: Microservices communicate internally
