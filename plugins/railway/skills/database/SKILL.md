@@ -1,7 +1,7 @@
 ---
 name: database
 description: Add an official Railway database to a project. Use when user wants to add Postgres, Redis, MySQL, or MongoDB. For other templates (Ghost, Strapi, n8n, etc.), use the templates skill.
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh:*), Bash(railway:*)
+allowed-tools: Bash(railway:*)
 ---
 
 # Database

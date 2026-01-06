@@ -1,7 +1,7 @@
 ---
 name: update-project
 description: Update Railway project settings. Use when user wants to change project name, enable/disable PR deploys, make project public/private, or modify project configuration.
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh:*), Bash(railway:*)
+allowed-tools: Bash(railway:*)
 ---
 
 # Update Railway Project

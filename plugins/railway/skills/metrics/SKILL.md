@@ -1,7 +1,7 @@
 ---
 name: metrics
 description: Get service metrics (CPU, memory, network, disk). Use when user asks about resource usage, performance, or how a service is performing.
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh:*), Bash(railway:*)
+allowed-tools: Bash(railway:*)
 ---
 
 # Service Metrics
