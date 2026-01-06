@@ -98,10 +98,10 @@ Railway databases auto-generate connection URL variables. Use the private versio
 
 | Database | Variable Reference |
 |----------|-------------------|
-| Postgres | `${{Postgres.DATABASE_PRIVATE_URL}}` |
-| MySQL | `${{MySQL.DATABASE_PRIVATE_URL}}` |
-| Redis | `${{Redis.REDIS_PRIVATE_URL}}` |
-| Mongo | `${{Mongo.MONGO_PRIVATE_URL}}` |
+| Postgres | `${{Postgres.DATABASE_URL}}` |
+| MySQL | `${{MySQL.DATABASE_URL}}` |
+| Redis | `${{Redis.REDIS_URL}}` |
+| Mongo | `${{Mongo.MONGO_URL}}` |
 
 **Postgres/MySQL example:**
 ```json
@@ -109,7 +109,7 @@ Railway databases auto-generate connection URL variables. Use the private versio
   "services": {
     "<apiId>": {
       "variables": {
-        "DATABASE_URL": { "value": "${{Postgres.DATABASE_PRIVATE_URL}}" }
+        "DATABASE_URL": { "value": "${{Postgres.DATABASE_URL}}" }
       }
     }
   }
@@ -122,7 +122,7 @@ Railway databases auto-generate connection URL variables. Use the private versio
   "services": {
     "<apiId>": {
       "variables": {
-        "REDIS_URL": { "value": "${{Redis.REDIS_PRIVATE_URL}}" }
+        "REDIS_URL": { "value": "${{Redis.REDIS_URL}}" }
       }
     }
   }
@@ -135,7 +135,7 @@ Railway databases auto-generate connection URL variables. Use the private versio
   "services": {
     "<apiId>": {
       "variables": {
-        "MONGO_URL": { "value": "${{Mongo.MONGO_PRIVATE_URL}}" }
+        "MONGO_URL": { "value": "${{Mongo.MONGO_URL}}" }
       }
     }
   }

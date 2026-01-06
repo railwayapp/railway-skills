@@ -313,7 +313,7 @@ Available types: `postgres`, `mysql`, `redis`, `mongo`
 - May prompt interactively (no `--yes` flag exists)
 - If it prompts or appears to hang, the database is likely being created - do NOT retry
 - Auto-applies (not staged), but wait for deployment to complete before wiring variables
-- Database variables (e.g., `DATABASE_PRIVATE_URL`) only available after fully deployed
+- Database variables (e.g., `DATABASE_URL`) only available after fully deployed
 
 ### Wait for Database Deployment
 
@@ -372,10 +372,10 @@ Railway databases auto-generate connection URL variables:
 
 | Database | Target Variable | Reference Value |
 |----------|-----------------|-----------------|
-| Postgres | `DATABASE_URL` | `${{Postgres.DATABASE_PRIVATE_URL}}` |
-| MySQL | `DATABASE_URL` | `${{MySQL.DATABASE_PRIVATE_URL}}` |
-| Redis | `REDIS_URL` | `${{Redis.REDIS_PRIVATE_URL}}` |
-| Mongo | `MONGO_URL` | `${{Mongo.MONGO_PRIVATE_URL}}` |
+| Postgres | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+| MySQL | `DATABASE_URL` | `${{MySQL.DATABASE_URL}}` |
+| Redis | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
+| Mongo | `MONGO_URL` | `${{Mongo.MONGO_URL}}` |
 
 **Note:** Service name in `${{ServiceName.VAR}}` is case-sensitive. Match the exact service name from the project.
 
@@ -390,7 +390,7 @@ See [variables.md](../reference/variables.md) for more on variable references.
 3. If not exists: railway add --database postgres (ONCE, no retries)
 4. Wait for deployment status = SUCCESS, re-query env config
 5. Identify target service (ask if multiple, or use linked service)
-6. Stage variable: DATABASE_URL: { "value": "${{Postgres.DATABASE_PRIVATE_URL}}" }
+6. Stage variable: DATABASE_URL: { "value": "${{Postgres.DATABASE_URL}}" }
 7. Apply changes
 ```
 
@@ -401,7 +401,7 @@ See [variables.md](../reference/variables.md) for more on variable references.
 3. If not exists: railway add --database postgres (ONCE, no retries)
 4. Wait for deployment status = SUCCESS
 5. Inform user: "Postgres created. Connect a service by setting:
-   DATABASE_URL=${{Postgres.DATABASE_PRIVATE_URL}}"
+   DATABASE_URL=${{Postgres.DATABASE_URL}}"
 ```
 
 **"connect the server to redis"**
