@@ -38,6 +38,7 @@ Copy `plugins/railway/skills/` to your agent's skills location, or reference the
 | Skill | Description |
 |-------|-------------|
 | [status](plugins/railway/skills/status/SKILL.md) | Check Railway project status |
+| [projects](plugins/railway/skills/projects/SKILL.md) | List, switch, and configure projects |
 | [new](plugins/railway/skills/new/SKILL.md) | Create projects, services, databases |
 | [service](plugins/railway/skills/service/SKILL.md) | Manage existing services |
 | [deploy](plugins/railway/skills/deploy/SKILL.md) | Deploy local code |
@@ -47,7 +48,7 @@ Copy `plugins/railway/skills/` to your agent's skills location, or reference the
 | [database](plugins/railway/skills/database/SKILL.md) | Add Railway databases |
 | [templates](plugins/railway/skills/templates/SKILL.md) | Deploy from marketplace |
 | [metrics](plugins/railway/skills/metrics/SKILL.md) | Query resource usage |
-| [update-project](plugins/railway/skills/update-project/SKILL.md) | Update project settings |
+| [railway-docs](plugins/railway/skills/railway-docs/SKILL.md) | Fetch up-to-date Railway documentation |
 
 ## Hooks
 
