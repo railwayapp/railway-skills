@@ -256,5 +256,5 @@ Successful deployment returns:
 
 - **Connect services**: Use `environment` skill to add variable references
 - **View deployed service**: Use `service` skill
-- **Check logs**: Use `deployment-logs` skill
+- **Check logs**: Use `deployment` skill
 - **Add domains**: Use `domain` skill

@@ -45,6 +45,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 API docs: https://docs.railway.com/api/llms-docs.md
 
 Full schema introspection:
+
 ```bash
 curl -s https://backboard.railway.com/graphql/v2 \
   -H 'content-type: application/json' \
@@ -67,3 +68,10 @@ Shared utilities in `plugins/railway/skills/lib/`:
 1. Create `plugins/railway/skills/{name}/SKILL.md` with YAML frontmatter (`name`, `description`)
 2. Choose CLI or API based on what's available/appropriate
 3. Reference base skills for preflight checks if needed
+
+## References
+
+Look at these when developing new skills:
+
+- https://code.claude.com/docs/en/skills
+- https://code.claude.com/docs/en/plugins

@@ -211,7 +211,7 @@ railway service link <service-name>
 - **Configure service**: Use `environment` skill (variables, commands, image, etc.)
 - **Delete service**: Use `environment` skill with `isDeleted: true`
 - **Apply changes**: Use `environment` skill
-- **View logs**: Use `deployment-logs` skill
+- **View logs**: Use `deployment` skill
 - **Deploy local code**: Use `deploy` skill
 
 ## Error Handling

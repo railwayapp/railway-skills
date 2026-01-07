@@ -66,18 +66,18 @@ For subdirectory deployments, prefer setting `rootDirectory` via the environment
 ```
 Deploying to <service>...
 ```
-Use `deployment-logs` skill to check build status (with `--lines` flag).
+Use `deployment` skill to check build status (with `--lines` flag).
 
 ### CI mode
 Build logs stream inline. If build fails, the error will be in the output.
 
 **Do NOT run `railway logs --build` after CI mode** - the logs already streamed. If you need
-more context, use `deployment-logs` skill with `--lines` flag (never stream).
+more context, use `deployment` skill with `--lines` flag (never stream).
 
 ## Composability
 
 - **Check status after deploy**: Use `service` skill
-- **View logs**: Use `deployment-logs` skill
+- **View logs**: Use `deployment` skill
 - **Fix config issues**: Use `environment` skill
 - **Redeploy after config fix**: Use `environment` skill
 

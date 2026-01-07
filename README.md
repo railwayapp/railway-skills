@@ -43,7 +43,7 @@ Copy `plugins/railway/skills/` to your agent's skills location, or reference the
 | [deploy](plugins/railway/skills/deploy/SKILL.md) | Deploy local code |
 | [domain](plugins/railway/skills/domain/SKILL.md) | Manage service domains |
 | [environment](plugins/railway/skills/environment/SKILL.md) | Manage config (vars, commands, replicas) |
-| [deployment-logs](plugins/railway/skills/deployment-logs/SKILL.md) | View build and runtime logs |
+| [deployment](plugins/railway/skills/deployment/SKILL.md) | Manage deployments (list, logs, redeploy, remove) |
 | [database](plugins/railway/skills/database/SKILL.md) | Add Railway databases |
 | [templates](plugins/railway/skills/templates/SKILL.md) | Deploy from marketplace |
 | [metrics](plugins/railway/skills/metrics/SKILL.md) | Query resource usage |

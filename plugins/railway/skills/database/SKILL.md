@@ -184,4 +184,4 @@ Each database template creates:
 
 - **Connect services**: Use `environment` skill to add variable references
 - **View database service**: Use `service` skill
-- **Check logs**: Use `deployment-logs` skill
+- **Check logs**: Use `deployment` skill

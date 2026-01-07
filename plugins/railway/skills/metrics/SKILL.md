@@ -179,7 +179,7 @@ SCRIPT
 
 - **Get IDs**: Use `status` skill or `railway status --json`
 - **Check service health**: Use `service` skill for deployment status
-- **View logs**: Use `deployment-logs` skill if metrics show issues
+- **View logs**: Use `deployment` skill if metrics show issues
 - **Scale service**: Use `environment` skill to adjust resources
 
 ## Error Handling

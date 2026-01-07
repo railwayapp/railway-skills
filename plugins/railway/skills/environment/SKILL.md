@@ -320,6 +320,6 @@ No project linked. Run `railway link` to link a project.
 ## Composability
 
 - **Create service**: Use `service` skill
-- **View logs**: Use `deployment-logs` skill
+- **View logs**: Use `deployment` skill
 - **Add domains**: Use `domain` skill
 - **Deploy local code**: Use `deploy` skill
