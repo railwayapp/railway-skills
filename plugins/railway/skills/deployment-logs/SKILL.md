@@ -1,6 +1,7 @@
 ---
 name: deployment-logs
-description: View Railway deployment logs. Use when user asks to see logs, check errors, debug issues, or investigate service behavior.
+description: View Railway deployment logs. Use when user asks to see logs, check errors, debug issues, investigate service behavior, view build output, or check deployment status. Always use this skill for log-related requests.
+allowed-tools: Bash(railway:*)
 ---
 
 # Deployment Logs
@@ -20,8 +21,8 @@ View build or deploy logs from Railway services.
 railway logs --lines 100 --json
 ```
 
-**Important:** Always use `--lines` to fetch a fixed number of logs. Without it,
-the command streams indefinitely which doesn't work.
+**Note:** In non-interactive mode (like Claude Code), streaming is automatically
+disabled and the CLI fetches logs and exits. Use `--lines` to control how many.
 
 ## View Build Logs
 
@@ -38,6 +39,20 @@ railway logs --service backend --lines 100 --json
 ```
 
 The `--service` flag accepts service name or ID. The CLI resolves names automatically.
+
+## Debug Failed Deployments
+
+By default, `railway logs` shows logs from the last successful deployment. To see
+logs from a failed or in-progress deployment:
+
+```bash
+railway logs --latest --lines 100 --json
+```
+
+Use `--latest` when:
+- The most recent deployment failed
+- A deployment is still in progress
+- You need to debug why a deployment didn't succeed
 
 ## Filter Logs
 
@@ -66,6 +81,7 @@ railway logs --lines 50 --filter "@level:error AND timeout" --json
 | `-b, --build` | Show build logs |
 | `-n, --lines <N>` | Number of lines to fetch (required) |
 | `-f, --filter <QUERY>` | Filter using query syntax |
+| `--latest` | Show logs from most recent deployment (even if failed/in-progress) |
 | `--json` | JSON output |
 | `[DEPLOYMENT_ID]` | Specific deployment ID (optional) |
 

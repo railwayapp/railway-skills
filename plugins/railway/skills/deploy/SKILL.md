@@ -1,6 +1,7 @@
 ---
 name: deploy
 description: Deploy local code to Railway using `railway up`. Use when user wants to deploy code from the current directory. For deploying a Docker image (not local code), use environment skill instead - there is no `railway up --image` flag.
+allowed-tools: Bash(railway:*)
 ---
 
 # Deploy

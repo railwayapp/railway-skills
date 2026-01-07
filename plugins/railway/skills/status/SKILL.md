@@ -64,6 +64,7 @@ Parse the JSON and present:
 - **Project**: name and workspace
 - **Environment**: current environment (production, staging, etc.)
 - **Services**: list with deployment status
+- **Active Deployments**: any in-progress deployments (from `activeDeployments` field)
 - **Domains**: any configured domains
 
 Example output format:
@@ -73,6 +74,9 @@ Environment: production
 
 Services:
 - web: deployed (https://my-app.up.railway.app)
-- api: deployed
+- api: deploying (build in progress)
 - postgres: running
 ```
+
+The `activeDeployments` array on each service shows currently running deployments
+with their status (building, deploying, etc.).

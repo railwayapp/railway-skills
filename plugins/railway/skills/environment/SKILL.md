@@ -1,6 +1,6 @@
 ---
 name: environment
-description: Manage Railway environment configuration. Use when user wants to check config, set variables, change build/start commands, update replicas, configure health checks, change Docker image, connect GitHub repos, delete services/volumes/buckets, or apply/deploy staged changes. Do NOT use `railway variables` CLI - use this skill instead.
+description: Manage Railway environment configuration. Use when user wants to check config, get service configuration, view service settings, compare services, set variables, change build/start commands, update replicas, configure health checks, change Docker image, connect GitHub repos, delete services/volumes/buckets, or apply/deploy staged changes. Prefer this skill over `railway service --json` for querying service configuration.
 allowed-tools: Bash(railway:*)
 ---
 

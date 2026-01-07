@@ -150,8 +150,29 @@ railway init -n <name>
 ```
 
 Options:
-- `-n, --name` - Project name (defaults to directory name)
-- `-w, --workspace` - Workspace name or ID
+- `-n, --name` - Project name (auto-generated if omitted in non-interactive mode)
+- `-w, --workspace` - Workspace name or ID (required if multiple workspaces exist)
+
+### Multiple Workspaces
+
+If the user has multiple workspaces, `railway init` requires the `--workspace` flag.
+
+Get workspace IDs from:
+```bash
+railway whoami --json
+```
+
+The `workspaces` array contains `{ id, name }` for each workspace.
+
+**Inferring workspace from user input:**
+If user says "deploy into xxx workspace" or "create project in my-team", match the
+name against the workspaces array and use the corresponding ID:
+
+```bash
+# User says: "create a project in my personal workspace"
+railway whoami --json | jq '.workspaces[] | select(.name | test("personal"; "i"))'
+# Use the matched ID: railway init -n myapp --workspace <matched-id>
+```
 
 ## Link Existing Project
 
