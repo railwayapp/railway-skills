@@ -21,11 +21,17 @@ List, switch, and configure Railway projects.
 
 ## List Projects
 
+The `railway list --json` output can be very large. Run in a subagent and return only essential fields:
+
+- Project: `id`, `name`
+- Workspace: `id`, `name`
+- Services: `name` (optional, if user needs service context)
+
 ```bash
 railway list --json
 ```
 
-Returns all projects across **all workspaces** with IDs, names, and environments.
+Extract and return a simplified summary, not the full JSON.
 
 ## List Workspaces
 
