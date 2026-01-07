@@ -1,6 +1,6 @@
 ---
 name: environment
-description: Manage Railway environment configuration. Use when user wants to check config, get service configuration, view service settings, compare services, set variables, change build/start commands, update replicas, configure health checks, change Docker image, connect GitHub repos, delete services/volumes/buckets, or apply/deploy staged changes. Prefer this skill over `railway service --json` for querying service configuration.
+description: Manage Railway environments. Use when user wants to create new environments, switch environments, check config, get service configuration, view service settings, compare services, set variables, change build/start commands, update replicas, configure health checks, change Docker image, connect GitHub repos, delete services/volumes/buckets, or apply/deploy staged changes. Prefer this skill over `railway service --json` for querying service configuration.
 allowed-tools: Bash(railway:*)
 ---
 
@@ -10,6 +10,9 @@ Query, stage, and apply configuration changes for Railway environments.
 
 ## When to Use
 
+- User wants to create a new environment
+- User wants to duplicate an environment (e.g., "copy production to staging")
+- User wants to switch to a different environment
 - User asks about current build/deploy settings, variables, replicas, health checks, domains
 - User asks to change service source (Docker image, branch, commit, root directory)
 - User wants to connect a service to a GitHub repo
@@ -20,6 +23,40 @@ Query, stage, and apply configuration changes for Railway environments.
 - User asks to delete a service, volume, or bucket
 - User says "apply changes", "commit changes", "deploy changes"
 - Auto-fixing build errors detected in logs
+
+## Create Environment
+
+Create a new environment in the linked project:
+
+```bash
+railway environment new <name>
+```
+
+Duplicate an existing environment:
+
+```bash
+railway environment new staging --duplicate production
+```
+
+With service-specific variables:
+
+```bash
+railway environment new staging --duplicate production --service-variable api PORT=3001
+```
+
+## Switch Environment
+
+Link a different environment to the current directory:
+
+```bash
+railway environment <name>
+```
+
+Or by ID:
+
+```bash
+railway environment <environment-id>
+```
 
 ## Get Context
 
