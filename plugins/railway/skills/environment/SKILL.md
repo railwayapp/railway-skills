@@ -1,6 +1,6 @@
 ---
 name: environment
-description: Manage Railway environments. Use when user wants to create new environments, switch environments, check config, get service configuration, view service settings, compare services, set variables, change build/start commands, update replicas, configure health checks, change Docker image, connect GitHub repos, delete services/volumes/buckets, or apply/deploy staged changes. Prefer this skill over `railway service --json` for querying service configuration.
+description: Manage Railway environments. Use when user wants to create new environments, switch environments, check config, get service configuration, view service settings, compare services, set variables, change build/start commands, add/update/scale replicas, configure health checks, change Docker image, connect GitHub repos, delete services/volumes/buckets, or apply/deploy staged changes. Also use for: "add N replicas", "scale up/down", "set replicas to N", "horizontal scaling". Prefer this skill over `railway service --json` for querying service configuration.
 allowed-tools: Bash(railway:*)
 ---
 
