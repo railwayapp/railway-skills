@@ -1,6 +1,6 @@
 ---
 name: new
-description: Create Railway projects, services, and databases. Use when user wants to deploy to Railway, create a new project, link to existing project, create a new service, add a database (postgres, mysql, redis, mongo), connect services to databases, deploy from a GitHub repo, or set up code to work on Railway. Handles "create a vite app", "add a backend service", "add postgres", "connect my api to the database", "init a new project", "deploy from github.com/user/repo", etc.
+description: Set up and deploy to Railway. Use when user says "setup", "deploy to railway", "initialize", "create project/service/database", "add postgres/redis/mysql/mongo", "connect to database", or deploy from GitHub. Handles initial setup AND adding services to existing projects.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*)
 ---
 
@@ -24,26 +24,33 @@ Create Railway projects, services, and databases with proper configuration.
 ## Prerequisites
 
 Check CLI installed:
+
 ```bash
 command -v railway
 ```
 
 If not installed:
+
 > Install Railway CLI:
+>
 > ```
 > npm install -g @railway/cli
 > ```
+>
 > or
+>
 > ```
 > brew install railway
 > ```
 
 Check authenticated:
+
 ```bash
 railway whoami --json
 ```
 
 If not authenticated:
+
 > Run `railway login` to authenticate.
 
 ## Decision Flow
@@ -96,6 +103,7 @@ railway status --json
 **Default behavior**: "deploy to railway" = add a service to the linked project.
 
 Do NOT create a new project unless user EXPLICITLY says:
+
 - "new project", "create a project", "init a project"
 - "separate project", "different project"
 
@@ -118,6 +126,7 @@ cd .. && railway status --json
 ```
 
 **If parent is linked**, you don't need to init/link the subdirectory. Instead:
+
 1. Create service: `railway add --service <name>`
 2. Set `rootDirectory` to subdirectory path via environment skill
 3. Deploy from root: `railway up`
@@ -131,6 +140,7 @@ cd .. && railway status --json
 Only use this section when NO project is linked (directly or via parent).
 
 ### Check User's Projects
+
 ```bash
 railway list --json
 ```
@@ -150,6 +160,7 @@ railway init -n <name>
 ```
 
 Options:
+
 - `-n, --name` - Project name (auto-generated if omitted in non-interactive mode)
 - `-w, --workspace` - Workspace name or ID (required if multiple workspaces exist)
 
@@ -158,6 +169,7 @@ Options:
 If the user has multiple workspaces, `railway init` requires the `--workspace` flag.
 
 Get workspace IDs from:
+
 ```bash
 railway whoami --json
 ```
@@ -181,6 +193,7 @@ railway link -p <project>
 ```
 
 Options:
+
 - `-p, --project` - Project name or ID
 - `-e, --environment` - Environment (default: production)
 - `-s, --service` - Service to link
@@ -197,6 +210,7 @@ railway add --service <name>
 **For GitHub repo sources**: Create an empty service, then invoke the `environment` skill to configure the source via staged changes API. Do NOT use `railway add --repo` - it requires GitHub app integration which often fails.
 
 Flow:
+
 1. `railway add --service my-api`
 2. Invoke `environment` skill to set `source.repo` and `source.branch`
 3. Apply changes to trigger deployment
@@ -207,19 +221,23 @@ Reference [railpack.md](../reference/railpack.md) for build configuration.
 Reference [monorepo.md](../reference/monorepo.md) for monorepo patterns.
 
 **Static site (Vite, CRA, Astro static):**
+
 - Railpack auto-detects common output dirs (dist, build)
 - If non-standard output dir: invoke `environment` skill to set `RAILPACK_STATIC_FILE_ROOT`
 - Do NOT use `railway variables` CLI - always use the environment skill
 
 **Node.js SSR (Next.js, Nuxt, Express):**
+
 - Verify `start` script exists in package.json
 - If custom start needed: invoke `environment` skill to set `startCommand`
 
 **Python (FastAPI, Django, Flask):**
+
 - Verify `requirements.txt` or `pyproject.toml` exists
 - Auto-detected by Railpack, usually no config needed
 
 **Go:**
+
 - Verify `go.mod` exists
 - Auto-detected, no config needed
 
@@ -228,10 +246,12 @@ Reference [monorepo.md](../reference/monorepo.md) for monorepo patterns.
 **Critical decision:** Root directory vs custom commands.
 
 **Isolated monorepo** (apps don't share code):
+
 - Set Root Directory to the app's subdirectory (e.g., `/frontend`)
 - Only that directory's code is available during build
 
 **Shared monorepo** (TypeScript workspaces, shared packages):
+
 - Do NOT set root directory
 - Set custom build/start commands to filter the package:
   - pnpm: `pnpm --filter <package> build`
@@ -249,6 +269,7 @@ Analyze the codebase to ensure Railway compatibility.
 ### Analyze Codebase
 
 Check for existing project files:
+
 - `package.json` → Node.js project
 - `requirements.txt`, `pyproject.toml` → Python project
 - `go.mod` → Go project
@@ -257,6 +278,7 @@ Check for existing project files:
 - None → Guide scaffolding
 
 **Monorepo detection:**
+
 - `pnpm-workspace.yaml` → pnpm workspace (shared monorepo)
 - `package.json` with `workspaces` field → npm/yarn workspace (shared monorepo)
 - `turbo.json` → Turborepo (shared monorepo)
@@ -267,22 +289,27 @@ Check for existing project files:
 If no code exists, suggest minimal patterns from [railpack.md](../reference/railpack.md):
 
 **Static site:**
+
 > Create an `index.html` file in the root directory.
 
 **Vite React:**
+
 ```bash
 npm create vite@latest . -- --template react
 ```
 
 **Astro:**
+
 ```bash
 npm create astro@latest
 ```
 
 **Python FastAPI:**
+
 > Create `main.py` with FastAPI app and `requirements.txt` with dependencies.
 
 **Go:**
+
 > Create `main.go` with HTTP server listening on `PORT` env var.
 
 ## Databases
@@ -331,6 +358,7 @@ railway add --database <type>
 Available types: `postgres`, `mysql`, `redis`, `mongo`
 
 **Behavior:**
+
 - May prompt interactively (no `--yes` flag exists)
 - If it prompts or appears to hang, the database is likely being created - do NOT retry
 - Auto-applies (not staged), but wait for deployment to complete before wiring variables
@@ -341,9 +369,17 @@ Available types: `postgres`, `mysql`, `redis`, `mongo`
 After `railway add --database`, poll the deployment status before wiring:
 
 ```graphql
-query serviceDeployments($projectId: String!, $serviceId: String!, $environmentId: String!) {
+query serviceDeployments(
+  $projectId: String!
+  $serviceId: String!
+  $environmentId: String!
+) {
   deployments(
-    input: { projectId: $projectId, serviceId: $serviceId, environmentId: $environmentId }
+    input: {
+      projectId: $projectId
+      serviceId: $serviceId
+      environmentId: $environmentId
+    }
     first: 1
   ) {
     edges {
@@ -371,16 +407,25 @@ query environmentConfig($environmentId: String!) {
 ```
 
 The `config.services` object contains each service's configuration. Check `source.image` for database patterns:
+
 - `ghcr.io/railway/postgres*` or `postgres:*` → Postgres
 - `ghcr.io/railway/redis*` or `redis:*` → Redis
 - `ghcr.io/railway/mysql*` or `mysql:*` → MySQL
 - `ghcr.io/railway/mongo*` or `mongo:*` → MongoDB
 
 Get service names for variable references:
+
 ```graphql
 query projectServices($projectId: String!) {
   project(id: $projectId) {
-    services { edges { node { id name } } }
+    services {
+      edges {
+        node {
+          id
+          name
+        }
+      }
+    }
   }
 }
 ```
@@ -391,12 +436,12 @@ Use the `environment` skill to set connection variables. Always use private URLs
 
 Railway databases auto-generate connection URL variables:
 
-| Database | Target Variable | Reference Value |
-|----------|-----------------|-----------------|
-| Postgres | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
-| MySQL | `DATABASE_URL` | `${{MySQL.DATABASE_URL}}` |
-| Redis | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
-| Mongo | `MONGO_URL` | `${{Mongo.MONGO_URL}}` |
+| Database | Target Variable | Reference Value              |
+| -------- | --------------- | ---------------------------- |
+| Postgres | `DATABASE_URL`  | `${{Postgres.DATABASE_URL}}` |
+| MySQL    | `DATABASE_URL`  | `${{MySQL.DATABASE_URL}}`    |
+| Redis    | `REDIS_URL`     | `${{Redis.REDIS_URL}}`       |
+| Mongo    | `MONGO_URL`     | `${{Mongo.MONGO_URL}}`       |
 
 **Note:** Service name in `${{ServiceName.VAR}}` is case-sensitive. Match the exact service name from the project.
 
@@ -405,6 +450,7 @@ See [variables.md](../reference/variables.md) for more on variable references.
 ### Database Examples
 
 **"add postgres and connect to the server"**
+
 ```
 1. FIRST: Query env config, check source.image for postgres pattern
 2. If postgres exists: Skip to step 5
@@ -416,6 +462,7 @@ See [variables.md](../reference/variables.md) for more on variable references.
 ```
 
 **"add postgres"**
+
 ```
 1. FIRST: Query env config, check source.image for postgres pattern
 2. If exists: "Postgres already exists in this project"
@@ -426,6 +473,7 @@ See [variables.md](../reference/variables.md) for more on variable references.
 ```
 
 **"connect the server to redis"**
+
 ```
 1. FIRST: Query env config, check source.image for redis pattern
 2. If redis exists: Wire up REDIS_URL with that service's name → apply
@@ -447,6 +495,7 @@ See [variables.md](../reference/variables.md) for more on variable references.
 ## Error Handling
 
 ### CLI Not Installed
+
 ```
 Railway CLI not installed. Install with:
   npm install -g @railway/cli
@@ -455,16 +504,19 @@ or
 ```
 
 ### Not Authenticated
+
 ```
 Not logged in to Railway. Run: railway login
 ```
 
 ### No Workspaces
+
 ```
 No workspaces found. Create one at railway.com or verify authentication.
 ```
 
 ### Project Name Taken
+
 ```
 Project name already exists. Either:
 - Link to existing: railway link -p <name>
@@ -472,6 +524,7 @@ Project name already exists. Either:
 ```
 
 ### Service Name Taken
+
 ```
 Service name already exists in this project. Use a different name:
   railway add --service <other-name>
@@ -480,6 +533,7 @@ Service name already exists in this project. Use a different name:
 ## Examples
 
 ### Create HTML Static Site
+
 ```
 User: "create a simple html site and deploy to railway"
 
@@ -493,6 +547,7 @@ User: "create a simple html site and deploy to railway"
 ```
 
 ### Create Vite React Service
+
 ```
 User: "create a vite react service"
 
@@ -504,6 +559,7 @@ User: "create a vite react service"
 ```
 
 ### Add Python API to Project
+
 ```
 User: "add a python api to my project"
 
@@ -515,6 +571,7 @@ User: "add a python api to my project"
 ```
 
 ### Link and Add Service
+
 ```
 User: "connect to my backend project and add a worker service"
 
@@ -525,6 +582,7 @@ User: "connect to my backend project and add a worker service"
 ```
 
 ### Deploy to Railway (Ambiguous)
+
 ```
 User: "deploy to railway"
 
@@ -538,6 +596,7 @@ User: "deploy to railway"
 ```
 
 ### Add Service to Isolated Monorepo
+
 ```
 User: "create a static site in the frontend directory"
 
@@ -549,6 +608,7 @@ User: "create a static site in the frontend directory"
 ```
 
 ### Add Service to TypeScript Monorepo
+
 ```
 User: "add a new api package to this turborepo"
 
@@ -561,6 +621,7 @@ User: "add a new api package to this turborepo"
 ```
 
 ### Deploy Existing pnpm Workspace Package
+
 ```
 User: "deploy the backend package to railway"
 
@@ -571,6 +632,7 @@ User: "deploy the backend package to railway"
 ```
 
 ### Deploy Subdirectory of Linked Project
+
 ```
 User: "create a vite app in my-app directory and deploy to railway"
 CWD: ~/projects/my-project/my-app (parent already linked to "my-project")

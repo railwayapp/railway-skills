@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy local code to Railway using `railway up`. Use when user wants to deploy code from the current directory. For deploying a Docker image (not local code), use environment skill instead - there is no `railway up --image` flag.
+description: Push code changes to Railway using `railway up`. Use when project is linked and user wants to push, deploy changes, or ship. For initial setup or creating services, use new skill. For Docker images, use environment skill.
 allowed-tools: Bash(railway:*)
 ---
 
