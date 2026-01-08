@@ -15,6 +15,15 @@ Check the current Railway project status for this directory.
 - Before any Railway operation (deploy, update service, add variables)
 - User asks about environments or domains
 
+## When NOT to Use
+
+Use the `environment` skill instead when user wants:
+- Detailed service configuration (builder type, dockerfile path, build command, root directory)
+- Deploy config (start command, restart policy, healthchecks, predeploy command)
+- Service source (repo, branch, image)
+- Compare service configs
+- Query or change environment variables
+
 ## Check Status
 
 Run:
