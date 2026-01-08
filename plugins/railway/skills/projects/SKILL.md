@@ -1,6 +1,6 @@
 ---
 name: projects
-description: Manage Railway projects. Use when user wants to list all projects, switch projects, rename project, enable/disable PR deploys, make project public/private, or modify project settings.
+description: This skill should be used when the user wants to list all projects, switch projects, rename a project, enable/disable PR deploys, make a project public/private, or modify project settings.
 allowed-tools: Bash(railway:*)
 ---
 

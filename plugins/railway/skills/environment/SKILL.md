@@ -1,6 +1,6 @@
 ---
 name: environment
-description: Manage Railway environments and service configuration. Use when user asks about service config/configuration, builder type, dockerfile path, build command, build environment, root directory, or wants to compare services. Also use for: creating/switching environments, setting variables, changing build/start commands, replica scaling ("add N replicas", "scale up/down"), health checks, Docker image changes, GitHub repo connections, deleting services/volumes/buckets, or applying staged changes. Prefer this over `railway status` for detailed configuration queries.
+description: This skill should be used when the user asks about service config/configuration, builder type, dockerfile path, build command, root directory, or wants to compare services. Also use for creating/switching environments, setting variables, changing build/start commands, replica scaling ("add N replicas", "scale up/down"), health checks, Docker image changes, GitHub repo connections, deleting services/volumes/buckets, or applying staged changes. Prefer this over `railway status` for detailed configuration queries.
 allowed-tools: Bash(railway:*)
 ---
 

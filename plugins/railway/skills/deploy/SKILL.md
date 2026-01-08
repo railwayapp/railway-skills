@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Push code changes to Railway using `railway up`. Use when project is linked and user wants to push, deploy changes, or ship. For initial setup or creating services, use new skill. For Docker images, use environment skill.
+description: This skill should be used when the user wants to push code to Railway, says "railway up", "deploy", "ship", or "push". For initial setup or creating services, use new skill. For Docker images, use environment skill.
 allowed-tools: Bash(railway:*)
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: status
-description: Check Railway project status. Use when user asks about Railway, deployments, services, environments, or before any Railway operation like deploying or updating services.
+description: This skill should be used when the user asks about Railway status, deployments, services, environments, or before any Railway operation like deploying or updating services.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*)
 ---
 

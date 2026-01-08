@@ -1,6 +1,6 @@
 ---
 name: templates
-description: Search, browse, and deploy Railway templates. Use when user wants to add a service from a template, find templates for a specific use case, deploy a database (Postgres, Redis, MySQL, MongoDB), or add tools like Ghost, Strapi, n8n, Minio, etc.
+description: This skill should be used when the user wants to add a service from a template, find templates for a specific use case, or deploy tools like Ghost, Strapi, n8n, Minio, Uptime Kuma, etc. For databases (Postgres, Redis, MySQL, MongoDB), prefer the database skill.
 allowed-tools: Bash(railway:*)
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: database
-description: Add an official Railway database to a project. Use when user wants to add Postgres, Redis, MySQL, or MongoDB. For other templates (Ghost, Strapi, n8n, etc.), use the templates skill.
+description: This skill should be used when the user wants to add a database (Postgres, Redis, MySQL, MongoDB), says "add postgres", "add redis", "add database", "connect to database", or "wire up the database". For other templates (Ghost, Strapi, n8n, etc.), use the templates skill.
 allowed-tools: Bash(railway:*)
 ---
 
@@ -15,6 +15,64 @@ For non-database templates, see the `templates` skill.
 - User asks to "add a database", "add Postgres", "add Redis", etc.
 - User needs a database for their application
 - User asks about connecting to a database
+- User says "add postgres and connect to my server"
+- User says "wire up the database"
+
+## Decision Flow
+
+**ALWAYS check for existing databases FIRST before creating.**
+
+```
+User mentions database
+        │
+  Check existing DBs first
+  (query env config for source.image)
+        │
+   ┌────┴────┐
+ Exists    Doesn't exist
+    │           │
+    │      Create database
+    │      (CLI or API)
+    │           │
+    │      Wait for deployment
+    │           │
+    └─────┬─────┘
+          │
+    User wants to
+    connect service?
+          │
+    ┌─────┴─────┐
+   Yes         No
+    │           │
+Wire vars    Done +
+via env     suggest wiring
+skill
+```
+
+## Check for Existing Databases
+
+Before creating a database, check if one already exists:
+
+```bash
+railway status --json
+```
+
+Then query environment config and check `source.image` for each service:
+
+```graphql
+query environmentConfig($environmentId: String!) {
+  environment(id: $environmentId) {
+    config(decryptVariables: false)
+  }
+}
+```
+
+The `config.services` object contains each service's configuration. Check `source.image` for:
+
+- `ghcr.io/railway/postgres*` or `postgres:*` → Postgres
+- `ghcr.io/railway/redis*` or `redis:*` → Redis
+- `ghcr.io/railway/mysql*` or `mysql:*` → MySQL
+- `ghcr.io/railway/mongo*` or `mongo:*` → MongoDB
 
 ## Available Databases
 
@@ -179,6 +237,33 @@ Each database template creates:
 | Template not found | Invalid template code | Use: `postgres`, `redis`, `mysql`, `mongodb` |
 | Permission denied | User lacks access | Need DEVELOPER role or higher |
 | Project not found | Invalid project ID | Run `railway status --json` for correct ID |
+
+## Example Workflows
+
+### "add postgres and connect to the server"
+
+1. Check existing DBs via env config query
+2. If postgres exists: Skip to step 5
+3. If not exists: Deploy postgres template (fetch template → deploy)
+4. Wait for deployment to complete
+5. Identify target service (ask if multiple, or use linked service)
+6. Use `environment` skill to stage: `DATABASE_URL: { "value": "${{Postgres.DATABASE_URL}}" }`
+7. Apply changes
+
+### "add postgres"
+
+1. Check existing DBs via env config query
+2. If exists: "Postgres already exists in this project"
+3. If not exists: Deploy postgres template
+4. Inform user: "Postgres created. Connect a service with: `DATABASE_URL=${{Postgres.DATABASE_URL}}`"
+
+### "connect the server to redis"
+
+1. Check existing DBs via env config query
+2. If redis exists: Wire up REDIS_URL via environment skill → apply
+3. If no redis: Ask "No Redis found. Create one?"
+   - Deploy redis template
+   - Wire REDIS_URL → apply
 
 ## Composability
 

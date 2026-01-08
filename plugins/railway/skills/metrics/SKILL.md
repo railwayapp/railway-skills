@@ -1,6 +1,6 @@
 ---
 name: metrics
-description: Get service metrics (CPU, memory, network, disk). Use when user asks about resource usage, performance, or how a service is performing.
+description: This skill should be used when the user asks about resource usage, CPU, memory, network, disk, or service performance. Covers questions like "how much memory is my service using" or "is my service slow".
 allowed-tools: Bash(railway:*)
 ---
 

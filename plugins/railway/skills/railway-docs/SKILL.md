@@ -1,6 +1,6 @@
 ---
 name: railway-docs
-description: Use when user asks about Railway features, how Railway works, or shares a docs.railway.com URL. Fetch up-to-date Railway docs to answer accurately.
+description: This skill should be used when the user asks about Railway features, how Railway works, or shares a docs.railway.com URL. Fetches up-to-date Railway docs to answer accurately.
 ---
 
 # Railway Docs

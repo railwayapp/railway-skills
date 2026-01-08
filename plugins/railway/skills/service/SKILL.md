@@ -1,6 +1,6 @@
 ---
 name: service
-description: Manage existing Railway services. Use for checking service status, renaming services, changing icons, linking services, or advanced service creation (Docker images). For creating services with local code, prefer the `new` skill. For GitHub repo sources, use `new` skill to create empty service then `environment` skill to configure source.
+description: This skill should be used when the user asks about service status, wants to rename a service, change service icons, link services, or create services with Docker images. For creating services with local code, prefer the `new` skill. For GitHub repo sources, use `new` skill to create empty service then `environment` skill to configure source.
 allowed-tools: Bash(railway:*)
 ---
 
