@@ -148,6 +148,8 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 
 After deploying a template, connect other services using reference variables.
 
+For complete variable syntax and wiring patterns, see [variables.md](../reference/variables.md).
+
 ### Pattern
 
 ```

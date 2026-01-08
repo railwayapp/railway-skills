@@ -148,6 +148,8 @@ The `patch` field in `environmentStagedChanges` contains pending changes. The ef
 
 For complete field reference, see [reference/environment-config.md](../reference/environment-config.md).
 
+For variable syntax and service wiring patterns, see [reference/variables.md](../reference/variables.md).
+
 ## Stage Changes
 
 Stage configuration changes via the `environmentStageChanges` mutation.

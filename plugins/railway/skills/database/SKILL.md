@@ -51,7 +51,9 @@ skill
 
 ## Check for Existing Databases
 
-Before creating a database, check if one already exists:
+Before creating a database, check if one already exists.
+
+For full environment config structure, see [environment-config.md](../reference/environment-config.md).
 
 ```bash
 railway status --json
