@@ -1,6 +1,6 @@
 ---
 name: environment
-description: This skill should be used when the user asks about config, "my config", "railway config", "what variables", "show variables", service configuration, builder type, dockerfile path, build command, root directory, or wants to compare services. Also use for creating/switching environments, querying or setting variables, changing build/start commands, replica scaling ("add N replicas", "scale up/down"), health checks, Docker image changes, GitHub repo connections, deleting services/volumes/buckets, or applying staged changes. Prefer this over `railway status` for configuration and variable queries.
+description: This skill should be used when the user asks "what variables", "show variables", "list variables", "add variable", "set variable", "delete variable", "env vars", "environment variables", or wants to manage variables in any way. Also use for "my config", "railway config", service configuration, builder type, dockerfile path, build commands, replica scaling ("add N replicas", "scale up/down"), health checks, Docker images, or applying staged changes. Prefer over status skill for any configuration or variable queries.
 allowed-tools: Bash(railway:*)
 ---
 
