@@ -72,11 +72,19 @@ railway logs --lines 50 --filter "@level:error AND timeout" --json
 
 ### Logs from Specific Deployment
 
+Deploy logs:
 ```bash
 railway logs <deployment-id> --lines 100 --json
 ```
 
-Get the deployment ID from `railway deployment list`.
+Build logs:
+```bash
+railway logs --build <deployment-id> --lines 100 --json
+```
+
+Get deployment ID from `railway deployment list`.
+
+**Note:** The deployment ID is a positional argument, NOT `--deployment <id>`. The `--deployment` flag is a boolean that selects deploy logs (vs `--build` for build logs).
 
 ## Redeploy
 
@@ -125,7 +133,8 @@ This is what users mean when they say "remove deploy", "take down", or "stop the
 |------|-------------|
 | `-s, --service <NAME>` | Service name or ID |
 | `-e, --environment <NAME>` | Environment name or ID |
-| `-b, --build` | Show build logs |
+| `-d, --deployment` | Show deploy logs (default, boolean flag) |
+| `-b, --build` | Show build logs (boolean flag) |
 | `-n, --lines <N>` | Number of lines (required) |
 | `-f, --filter <QUERY>` | Filter using query syntax |
 | `--latest` | Most recent deployment (even if failed) |
