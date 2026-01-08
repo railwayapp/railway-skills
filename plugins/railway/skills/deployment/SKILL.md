@@ -70,6 +70,21 @@ railway logs --lines 50 --filter "connection refused" --json
 railway logs --lines 50 --filter "@level:error AND timeout" --json
 ```
 
+### Time-Based Filtering
+
+```bash
+# Logs from last hour
+railway logs --since 1h --lines 100 --json
+
+# Logs between 30 and 10 minutes ago
+railway logs --since 30m --until 10m --lines 100 --json
+
+# Logs from specific timestamp
+railway logs --since 2024-01-15T10:00:00Z --lines 100 --json
+```
+
+Formats: relative (`30s`, `5m`, `2h`, `1d`, `1w`) or ISO 8601 timestamps.
+
 ### Logs from Specific Deployment
 
 Deploy logs:
@@ -98,6 +113,16 @@ The `-y` flag skips confirmation. Useful when:
 - Config changed via environment skill
 - Need to restart without new code
 - Previous deploy succeeded but service misbehaving
+
+### Restart Container Only
+
+Restart without rebuilding (picks up external resource changes):
+
+```bash
+railway restart --service <name> -y
+```
+
+Use when external resources (S3 files, config maps) changed but code didn't.
 
 ## Remove Deployment
 
@@ -137,11 +162,20 @@ This is what users mean when they say "remove deploy", "take down", or "stop the
 | `-b, --build` | Show build logs (boolean flag) |
 | `-n, --lines <N>` | Number of lines (required) |
 | `-f, --filter <QUERY>` | Filter using query syntax |
+| `--since <TIME>` | Start time (relative or ISO 8601) |
+| `--until <TIME>` | End time (relative or ISO 8601) |
 | `--latest` | Most recent deployment (even if failed) |
 | `--json` | JSON output |
 | `[DEPLOYMENT_ID]` | Specific deployment (optional) |
 
 ### redeploy
+
+| Flag | Description |
+|------|-------------|
+| `-s, --service <NAME>` | Service name or ID |
+| `-y, --yes` | Skip confirmation |
+
+### restart
 
 | Flag | Description |
 |------|-------------|

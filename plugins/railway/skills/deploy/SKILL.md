@@ -44,6 +44,16 @@ Default is linked service. To deploy to a different service:
 railway up --detach --service backend
 ```
 
+## Deploy to Unlinked Project
+
+Deploy to a project without linking first:
+
+```bash
+railway up --project <project-id> --environment production --detach
+```
+
+Requires both `--project` and `--environment` flags.
+
 ## CLI Options
 
 | Flag | Description |
@@ -52,6 +62,7 @@ railway up --detach --service backend
 | `-c, --ci` | Stream build logs, exit when done |
 | `-s, --service <NAME>` | Target service (defaults to linked) |
 | `-e, --environment <NAME>` | Target environment (defaults to linked) |
+| `-p, --project <ID>` | Target project (requires --environment) |
 | `[PATH]` | Path to deploy (defaults to current directory) |
 
 ## Directory Linking
