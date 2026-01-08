@@ -148,6 +148,8 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 
 After deployment, other services connect using reference variables.
 
+For complete variable reference syntax and wiring patterns, see [variables.md](../reference/variables.md).
+
 ### Backend Services (Server-side)
 
 Use the private/internal URL for server-to-server communication:
