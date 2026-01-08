@@ -1,6 +1,6 @@
 ---
 name: status
-description: This skill should be used when the user asks about Railway status, deployments, services, environments, or before any Railway operation like deploying or updating services.
+description: This skill should be used when the user asks about Railway status, deployments, services, environments, or before any Railway operation like deploying or updating services. For detailed service configuration (dockerfile path, build command, variables, etc.), use the environment skill instead.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*)
 ---
 
