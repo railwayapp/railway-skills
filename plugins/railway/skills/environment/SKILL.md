@@ -152,25 +152,11 @@ For variable syntax and service wiring patterns, see [reference/variables.md](..
 
 ## Stage Changes
 
-Stage configuration changes via the `environmentStageChanges` mutation.
-
-### Fetch Existing Staged Changes First (Critical)
-
-The mutation **replaces** all staged changes, it does not merge. You MUST fetch existing staged changes and merge before calling the mutation.
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
-  'query staged($envId: String!) {
-    environmentStagedChanges(environmentId: $envId) { patch(decryptVariables: false) }
-  }' \
-  '{"envId": "ENV_ID"}'
-```
-
-### Stage Changes Mutation
+Stage configuration changes via the `environmentStageChanges` mutation. Use `merge: true` to automatically merge with existing staged changes.
 
 ```graphql
-mutation stageEnvironmentChanges($environmentId: String!, $input: EnvironmentConfig!) {
-  environmentStageChanges(environmentId: $environmentId, input: $input) {
+mutation stageEnvironmentChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
+  environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) {
     id
   }
 }
@@ -181,38 +167,47 @@ mutation stageEnvironmentChanges($environmentId: String!, $input: EnvironmentCon
 Example:
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
-  'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!) {
-    environmentStageChanges(environmentId: $environmentId, input: $input) { id }
+  'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
+    environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
   }' \
-  '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"build": {"buildCommand": "npm run build"}}}}}'
+  '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"build": {"buildCommand": "npm run build"}}}}, "merge": true}'
 ```
-
-### Merging Changes
-
-If existing staged changes are:
-```json
-{"services": {"svc-id": {"source": {"image": "nginx"}}}}
-```
-
-And user wants to add a variable, the merged input must be:
-```json
-{"services": {"svc-id": {"source": {"image": "nginx"}, "variables": {"HELLO": {"value": "world"}}}}}
-```
-
-NOT just the new change (which would erase the image change).
 
 ### Delete Service
 
 Use `isDeleted: true`:
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
-  'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!) {
-    environmentStageChanges(environmentId: $environmentId, input: $input) { id }
+  'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
+    environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
   }' \
-  '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"isDeleted": true}}}}'
+  '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"isDeleted": true}}}, "merge": true}'
 ```
 
-## Apply Changes
+## Stage and Apply Immediately
+
+For single changes that should deploy right away, use `environmentPatchCommit` to stage and apply in one call.
+
+```graphql
+mutation environmentPatchCommit($environmentId: String!, $patch: EnvironmentConfig, $commitMessage: String) {
+  environmentPatchCommit(environmentId: $environmentId, patch: $patch, commitMessage: $commitMessage)
+}
+```
+
+Example:
+```bash
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+  'mutation patchCommit($environmentId: String!, $patch: EnvironmentConfig, $commitMessage: String) {
+    environmentPatchCommit(environmentId: $environmentId, patch: $patch, commitMessage: $commitMessage)
+  }' \
+  '{"environmentId": "ENV_ID", "patch": {"services": {"SERVICE_ID": {"variables": {"API_KEY": {"value": "secret"}}}}}, "commitMessage": "add API_KEY"}'
+```
+
+**When to use:** Single change, no need to batch, user wants immediate deployment.
+
+**When NOT to use:** Multiple related changes to batch, or user says "stage only" / "don't deploy yet".
+
+## Apply Staged Changes
 
 Commit staged changes and trigger deployments.
 
@@ -266,29 +261,23 @@ Returns a workflow ID (string) on success.
 
 ## Auto-Apply Behavior
 
-By default, **apply changes immediately** after staging.
+By default, **apply changes immediately**.
 
-### When to Auto-Apply (default)
-- User makes a single configuration change
-- No preexisting staged changes before this update
-- User doesn't explicitly ask to "just stage" or "stage without deploying"
+### Flow
+
+**Single change:** Use `environmentPatchCommit` to stage and apply in one call.
+
+**Multiple changes or batching:** Use `environmentStageChanges` with `merge: true` for each change, then `environmentPatchCommitStaged` to apply.
 
 ### When NOT to Auto-Apply
-- There were preexisting staged changes (user may be batching changes)
 - User explicitly says "stage only", "don't deploy yet", or similar
-- Making multiple related changes that should be batched
+- User is making multiple related changes that should deploy together
 
 **When you don't auto-apply, tell the user:**
 > Changes staged. Apply them at: https://railway.com/project/{projectId}
 > Or ask me to apply them.
 
 Get `projectId` from `railway status --json` → `project.id`
-
-### Flow
-1. Check for preexisting staged changes before making updates
-2. Stage the new changes
-3. If no preexisting changes → apply to commit and deploy
-4. If preexisting changes → inform user changes are staged, ask if they want to apply
 
 ## Error Handling
 
