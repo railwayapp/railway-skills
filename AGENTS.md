@@ -12,6 +12,8 @@ Read `plugins/railway/skills/{name}/SKILL.md` for detailed usage, examples, and 
 For general info on how Claude Code skills work, look up the Claude Code skill
 documentation.
 
+When editing or creating skills, use the `skill-development` skill to follow best practices.
+
 ## Architecture
 
 Skills can use either the Railway CLI or GraphQL API:
