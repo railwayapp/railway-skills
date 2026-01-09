@@ -59,21 +59,25 @@ mutation serviceCreate($input: ServiceCreateInput!) {
 ### Example: Create empty service
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation createService($input: ServiceCreateInput!) {
     serviceCreate(input: $input) { id name }
   }' \
   '{"input": {"projectId": "PROJECT_ID"}}'
+SCRIPT
 ```
 
 ### Example: Create service with image
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation createService($input: ServiceCreateInput!) {
     serviceCreate(input: $input) { id name }
   }' \
   '{"input": {"projectId": "PROJECT_ID", "name": "my-service", "source": {"image": "nginx:latest"}}}'
+SCRIPT
 ```
 
 ### Connecting a GitHub Repo
@@ -157,11 +161,13 @@ Extract `service.id` from the response.
 ### Update Name
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation updateService($id: String!, $input: ServiceUpdateInput!) {
     serviceUpdate(id: $id, input: $input) { id name }
   }' \
   '{"id": "SERVICE_ID", "input": {"name": "new-name"}}'
+SCRIPT
 ```
 
 ### Update Icon
@@ -177,11 +183,13 @@ Icons can be image URLs or animated GIFs.
 **Railway Devicons:** Query `https://devicons.railway.app/{query}` for common developer icons (e.g., `github`, `postgres`, `redis`, `nodejs`). Browse all at https://devicons.railway.app
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation updateService($id: String!, $input: ServiceUpdateInput!) {
     serviceUpdate(id: $id, input: $input) { id icon }
   }' \
   '{"id": "SERVICE_ID", "input": {"icon": "https://devicons.railway.app/github"}}'
+SCRIPT
 ```
 
 ### ServiceUpdateInput Fields

@@ -45,11 +45,13 @@ Extract:
 
 Get workspace ID:
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query getWorkspace($projectId: String!) {
     project(id: $projectId) { workspaceId }
   }' \
   '{"projectId": "PROJECT_ID"}'
+SCRIPT
 ```
 
 ## Search Templates
@@ -57,6 +59,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 List available templates with optional filters:
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query templates($first: Int, $verified: Boolean) {
     templates(first: $first, verified: $verified) {
@@ -71,6 +74,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
     }
   }' \
   '{"first": 20, "verified": true}'
+SCRIPT
 ```
 
 ### Arguments
@@ -90,6 +94,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 Fetch a specific template by code:
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query template($code: String!) {
     template(code: $code) {
@@ -100,6 +105,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
     }
   }' \
   '{"code": "postgres"}'
+SCRIPT
 ```
 
 Returns:
@@ -111,6 +117,7 @@ Returns:
 ### Step 1: Fetch Template
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query template($code: String!) {
     template(code: $code) {
@@ -119,11 +126,13 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
     }
   }' \
   '{"code": "postgres"}'
+SCRIPT
 ```
 
 ### Step 2: Deploy to Project
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation deployTemplate($input: TemplateDeployV2Input!) {
     templateDeployV2(input: $input) {
@@ -140,6 +149,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
       "workspaceId": "WORKSPACE_ID"
     }
   }'
+SCRIPT
 ```
 
 **Important:** `serializedConfig` is the exact JSON object from the template query, not a string.
@@ -179,6 +189,7 @@ ${{Postgres.DATABASE_URL}}
 ## Example: Add PostgreSQL
 
 ```bash
+bash <<'SCRIPT'
 # 1. Get context
 railway status --json
 # → project.id = "proj-123", environment.id = "env-456"
@@ -205,11 +216,13 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
     "environmentId": "env-456",
     "workspaceId": "ws-789"
   }}'
+SCRIPT
 ```
 
 ## Example: Search for CMS Templates
 
 ```bash
+bash <<'SCRIPT'
 # Search verified templates
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query {
@@ -219,8 +232,8 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
       }
     }
   }' '{}'
-
 # Filter results for "CMS" category or search descriptions
+SCRIPT
 ```
 
 ## What Gets Created

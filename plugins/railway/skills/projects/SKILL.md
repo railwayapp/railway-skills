@@ -72,11 +72,13 @@ Extract `project.id` from the response.
 ### Update Mutation
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation updateProject($id: String!, $input: ProjectUpdateInput!) {
     projectUpdate(id: $id, input: $input) { name prDeploys isPublic botPrEnvironments }
   }' \
   '{"id": "PROJECT_ID", "input": {"name": "new-name"}}'
+SCRIPT
 ```
 
 ### ProjectUpdateInput Fields

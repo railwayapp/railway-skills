@@ -98,11 +98,13 @@ Extract:
 
 Get workspace ID (not in status output):
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query getWorkspace($projectId: String!) {
     project(id: $projectId) { workspaceId }
   }' \
   '{"projectId": "PROJECT_ID"}'
+SCRIPT
 ```
 
 ## Adding a Database
@@ -110,6 +112,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 ### Step 1: Fetch Template
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query template($code: String!) {
     template(code: $code) {
@@ -119,6 +122,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
     }
   }' \
   '{"code": "postgres"}'
+SCRIPT
 ```
 
 This returns the template's `id` and `serializedConfig` needed for deployment.
@@ -126,6 +130,7 @@ This returns the template's `id` and `serializedConfig` needed for deployment.
 ### Step 2: Deploy Template
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation deployTemplate($input: TemplateDeployV2Input!) {
     templateDeployV2(input: $input) {
@@ -142,6 +147,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
       "workspaceId": "WORKSPACE_ID"
     }
   }'
+SCRIPT
 ```
 
 **Important:** `serializedConfig` is the exact object from the template query, not a string.
@@ -176,6 +182,7 @@ Better pattern: Frontend → Backend API → Database
 ## Example: Add PostgreSQL
 
 ```bash
+bash <<'SCRIPT'
 # 1. Get context
 railway status --json
 # Extract project.id and environment.id
@@ -194,6 +201,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
     templateDeployV2(input: $input) { projectId workflowId }
   }' \
   '{"input": {"templateId": "...", "serializedConfig": {...}, "projectId": "...", "environmentId": "...", "workspaceId": "..."}}'
+SCRIPT
 ```
 
 ### Then Connect From Another Service

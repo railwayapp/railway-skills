@@ -8,6 +8,18 @@ allowed-tools: Bash(railway:*)
 
 Query, stage, and apply configuration changes for Railway environments.
 
+## Shell Escaping
+
+**CRITICAL:** When running GraphQL queries via bash, you MUST wrap in heredoc to prevent shell escaping issues:
+
+```bash
+bash <<'SCRIPT'
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh 'query ...' '{"var": "value"}'
+SCRIPT
+```
+
+Without the heredoc wrapper, multi-line commands break and exclamation marks in GraphQL non-null types get escaped, causing query failures.
+
 ## When to Use
 
 - User wants to create a new environment
@@ -119,12 +131,14 @@ query environmentConfig($environmentId: String!) {
 Example:
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query envConfig($envId: String!) {
     environment(id: $envId) { id config(decryptVariables: false) }
     environmentStagedChanges(environmentId: $envId) { id patch(decryptVariables: false) }
   }' \
   '{"envId": "ENV_ID"}'
+SCRIPT
 ```
 
 ### Response Structure
@@ -199,11 +213,13 @@ mutation stageEnvironmentChanges(
 Example:
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
     environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
   }' \
   '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"build": {"buildCommand": "npm run build"}}}}, "merge": true}'
+SCRIPT
 ```
 
 ### Delete Service
@@ -211,11 +227,13 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 Use `isDeleted: true`:
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
     environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
   }' \
   '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"isDeleted": true}}}, "merge": true}'
+SCRIPT
 ```
 
 ## Stage and Apply Immediately
@@ -239,11 +257,13 @@ mutation environmentPatchCommit(
 Example:
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation patchCommit($environmentId: String!, $patch: EnvironmentConfig, $commitMessage: String) {
     environmentPatchCommit(environmentId: $environmentId, patch: $patch, commitMessage: $commitMessage)
   }' \
   '{"environmentId": "ENV_ID", "patch": {"services": {"SERVICE_ID": {"variables": {"API_KEY": {"value": "secret"}}}}}, "commitMessage": "add API_KEY"}'
+SCRIPT
 ```
 
 **When to use:** Single change, no need to batch, user wants immediate deployment.
@@ -277,11 +297,13 @@ mutation environmentPatchCommitStaged(
 Example:
 
 ```bash
+bash <<'SCRIPT'
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation commitStaged($environmentId: String!, $message: String) {
     environmentPatchCommitStaged(environmentId: $environmentId, commitMessage: $message)
   }' \
   '{"environmentId": "ENV_ID", "message": "add API_KEY variable"}'
+SCRIPT
 ```
 
 ### Parameters
