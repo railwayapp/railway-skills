@@ -155,6 +155,25 @@ For complete field reference, see [reference/environment-config.md](../reference
 
 For variable syntax and service wiring patterns, see [reference/variables.md](../reference/variables.md).
 
+## Get Rendered Variables
+
+The GraphQL queries above return **unrendered** variables - template syntax like `${{shared.DOMAIN}}` is preserved. This is correct for management/editing.
+
+To see **rendered** (resolved) values as they appear at runtime:
+
+```bash
+# Current linked service
+railway variables --json
+
+# Specific service
+railway variables --service <service-name> --json
+```
+
+**When to use:**
+- Debugging connection issues (see actual URLs/ports)
+- Verifying variable resolution is correct
+- Viewing Railway-injected values (RAILWAY_*)
+
 ## Stage Changes
 
 Stage configuration changes via the `environmentStageChanges` mutation. Use `merge: true` to automatically merge with existing staged changes.
