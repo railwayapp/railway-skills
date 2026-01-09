@@ -1,6 +1,6 @@
 ---
 name: environment
-description: This skill should be used when the user asks "what variables", "show variables", "list variables", "add variable", "set variable", "delete variable", "env vars", "environment variables", or wants to manage variables in any way. Also use for "my config", "railway config", service configuration, builder type, dockerfile path, build commands, replica scaling ("add N replicas", "scale up/down"), health checks, Docker images, or applying staged changes. Prefer over status skill for any configuration or variable queries.
+description: This skill should be used when the user asks "what variables", "show variables", "list variables", "add variable", "set variable", "set env var", "add env var", "delete variable", "env vars", "environment variables" (env vars), or wants to manage variables in any way. Also use for "my config", "railway config", "service config", service configuration, builder type, dockerfile path, build commands, replica scaling ("add N replicas", "scale up/down"), health checks, Docker images, sleep settings ("disable sleeping", "remove sleeping", "turn off sleep", "enable sleeping"), or applying staged changes. This skill should be used for anything related to environment and service/volume configuration and management on Railway. Prefer over status skill for any configuration or variable queries.
 allowed-tools: Bash(railway:*)
 ---
 
@@ -65,6 +65,7 @@ railway status --json
 ```
 
 Extract:
+
 - `project.id` - for service lookup
 - `environment.id` - for the mutations
 - `service.id` - default service if user doesn't specify one
@@ -116,6 +117,7 @@ query environmentConfig($environmentId: String!) {
 ```
 
 Example:
+
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'query envConfig($envId: String!) {
@@ -135,7 +137,10 @@ The `config` field contains current configuration:
     "<serviceId>": {
       "source": { "repo": "...", "branch": "main" },
       "build": { "buildCommand": "npm run build", "builder": "NIXPACKS" },
-      "deploy": { "startCommand": "npm start", "multiRegionConfig": { "us-west2": { "numReplicas": 1 } } },
+      "deploy": {
+        "startCommand": "npm start",
+        "multiRegionConfig": { "us-west2": { "numReplicas": 1 } }
+      },
       "variables": { "NODE_ENV": { "value": "production" } },
       "networking": { "serviceDomains": {}, "customDomains": {} }
     }
@@ -155,8 +160,16 @@ For variable syntax and service wiring patterns, see [reference/variables.md](..
 Stage configuration changes via the `environmentStageChanges` mutation. Use `merge: true` to automatically merge with existing staged changes.
 
 ```graphql
-mutation stageEnvironmentChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
-  environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) {
+mutation stageEnvironmentChanges(
+  $environmentId: String!
+  $input: EnvironmentConfig!
+  $merge: Boolean
+) {
+  environmentStageChanges(
+    environmentId: $environmentId
+    input: $input
+    merge: $merge
+  ) {
     id
   }
 }
@@ -165,6 +178,7 @@ mutation stageEnvironmentChanges($environmentId: String!, $input: EnvironmentCon
 **Important:** Always use variables (not inline input) because service IDs are UUIDs which can't be used as unquoted GraphQL object keys.
 
 Example:
+
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
@@ -176,6 +190,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 ### Delete Service
 
 Use `isDeleted: true`:
+
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
@@ -189,12 +204,21 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 For single changes that should deploy right away, use `environmentPatchCommit` to stage and apply in one call.
 
 ```graphql
-mutation environmentPatchCommit($environmentId: String!, $patch: EnvironmentConfig, $commitMessage: String) {
-  environmentPatchCommit(environmentId: $environmentId, patch: $patch, commitMessage: $commitMessage)
+mutation environmentPatchCommit(
+  $environmentId: String!
+  $patch: EnvironmentConfig
+  $commitMessage: String
+) {
+  environmentPatchCommit(
+    environmentId: $environmentId
+    patch: $patch
+    commitMessage: $commitMessage
+  )
 }
 ```
 
 Example:
+
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation patchCommit($environmentId: String!, $patch: EnvironmentConfig, $commitMessage: String) {
@@ -218,7 +242,11 @@ Commit staged changes and trigger deployments.
 **Mutation name: `environmentPatchCommitStaged`**
 
 ```graphql
-mutation environmentPatchCommitStaged($environmentId: String!, $message: String, $skipDeploys: Boolean) {
+mutation environmentPatchCommitStaged(
+  $environmentId: String!
+  $message: String
+  $skipDeploys: Boolean
+) {
   environmentPatchCommitStaged(
     environmentId: $environmentId
     commitMessage: $message
@@ -228,6 +256,7 @@ mutation environmentPatchCommitStaged($environmentId: String!, $message: String,
 ```
 
 Example:
+
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
   'mutation commitStaged($environmentId: String!, $message: String) {
@@ -238,15 +267,16 @@ ${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
 
 ### Parameters
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `environmentId` | String! | - | Environment ID from status |
-| `message` | String | null | Short description of changes |
-| `skipDeploys` | Boolean | false | Skip deploys (only if user explicitly asks) |
+| Field           | Type    | Default | Description                                 |
+| --------------- | ------- | ------- | ------------------------------------------- |
+| `environmentId` | String! | -       | Environment ID from status                  |
+| `message`       | String  | null    | Short description of changes                |
+| `skipDeploys`   | Boolean | false   | Skip deploys (only if user explicitly asks) |
 
 ### Commit Message
 
 Keep very short - one sentence max. Examples:
+
 - "set build command to fix npm error"
 - "add API_KEY variable"
 - "increase replicas to 3"
@@ -270,10 +300,12 @@ By default, **apply changes immediately**.
 **Multiple changes or batching:** Use `environmentStageChanges` with `merge: true` for each change, then `environmentPatchCommitStaged` to apply.
 
 ### When NOT to Auto-Apply
+
 - User explicitly says "stage only", "don't deploy yet", or similar
 - User is making multiple related changes that should deploy together
 
 **When you don't auto-apply, tell the user:**
+
 > Changes staged. Apply them at: https://railway.com/project/{projectId}
 > Or ask me to apply them.
 
@@ -282,28 +314,35 @@ Get `projectId` from `railway status --json` → `project.id`
 ## Error Handling
 
 ### Service Not Found
+
 ```
 Service "foo" not found in project. Available services: api, web, worker
 ```
 
 ### No Staged Changes
+
 ```
 No patch to apply
 ```
+
 There are no staged changes to commit. Stage changes first.
 
 ### Invalid Configuration
+
 Common issues:
+
 - `buildCommand` and `startCommand` cannot be identical
 - `buildCommand` only valid with NIXPACKS builder
 - `dockerfilePath` only valid with DOCKERFILE builder
 
 ### No Permission
+
 ```
 You don't have permission to modify this environment. Check your Railway role.
 ```
 
 ### No Linked Project
+
 ```
 No project linked. Run `railway link` to link a project.
 ```
