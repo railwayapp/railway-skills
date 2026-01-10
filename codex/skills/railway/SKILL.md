@@ -19,6 +19,11 @@ railway whoami --json
 railway status --json
 ```
 
+## Preference (CLI First)
+
+- Use the Railway CLI for all operations when available (you are authenticated locally).
+- Use GraphQL only when the CLI lacks the operation or for bulk queries.
+
 ## GraphQL Helper
 
 ```bash
@@ -32,4 +37,22 @@ railway status --json
 
 ## References
 
-See `references/` for task-specific flows, examples, and error handling.
+CLI flows (default):
+
+- `references/cli/status/`
+- `references/cli/projects/`
+- `references/cli/new/`
+- `references/cli/service/`
+- `references/cli/deploy/`
+- `references/cli/domain/`
+- `references/cli/environment/`
+- `references/cli/deployment/`
+- `references/cli/database/`
+- `references/cli/templates/`
+- `references/cli/metrics/`
+- `references/cli/reference/`
+
+GraphQL helper + docs:
+
+- `references/graphql/README.md`
+- `references/graphql/railway-docs/`
