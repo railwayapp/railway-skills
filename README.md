@@ -20,6 +20,16 @@ claude --plugin-dir ~/railway-claude-plugin/plugins/railway
 
 Skills are invoked automatically when relevant.
 
+### OpenAI Codex
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R codex/skills/railway ~/.codex/skills/
+```
+
+If you use a custom `CODEX_HOME`, copy into `$CODEX_HOME/skills/railway`.
+Restart Codex to pick up the new skills.
+
 ### Updating
 
 ```bash
@@ -60,6 +70,12 @@ This plugin includes a PreToolUse hook that auto-approves `railway-api.sh` calls
 railway-claude-plugin/
 ├── .claude-plugin/
 │   └── marketplace.json
+├── codex/
+│   └── skills/
+│       └── railway/
+│           ├── SKILL.md
+│           ├── lib/
+│           └── references/
 ├── plugins/
 │   └── railway/
 │       ├── .claude-plugin/
