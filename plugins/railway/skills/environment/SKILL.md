@@ -1,12 +1,35 @@
 ---
 name: environment
-description: This skill should be used for ANY variable or env var operations: "add variable", "add variables", "set variable", "set variables", "delete variable", "delete variables", "what variables", "show variables", "list variables", "env vars", "environment variables", "shared variables", "create variables". Also use for service configuration: source (Docker image, GitHub repo, branch, commit), build settings (builder type, dockerfile, build command, watch patterns), deploy settings (start command, replicas, regions, health checks, restart policy, cron schedule, sleep/wake), and lifecycle (delete service, delete volume). Also triggers on "my config", "service config", "railway config", "scale up", "scale down", "add replicas", "change image", "connect repo", "apply changes", "commit changes". Prefer over status skill for any configuration or variable queries.
+description: This skill should be used when the user asks "what's the config", "show me the configuration", "what variables are set", "environment config", "service config", "railway config", or wants to add/set/delete variables, change build/deploy settings, scale replicas, connect repos, or delete services.
 allowed-tools: Bash(railway:*)
 ---
 
 # Environment Configuration
 
 Query, stage, and apply configuration changes for Railway environments.
+
+## Quick Actions
+
+**When user asks "what's the config" or "show configuration":**
+
+Run `railway status --json` to get the environment ID, then **always** query the full config:
+```bash
+bash <<'SCRIPT'
+${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+  'query envConfig($envId: String!) {
+    environment(id: $envId) { id config }
+  }' \
+  '{"envId": "ENV_ID_FROM_STATUS"}'
+SCRIPT
+```
+Present: source (repo/image), build settings, deploy settings, variables per service.
+
+**When user asks "what variables" or "show env vars":**
+Use the same environment config query above - it includes variables per service and shared variables.
+
+For **rendered** (resolved) variable values: `railway variables --json`
+
+For mutations (add/change/delete), see sections below.
 
 ## Shell Escaping
 
