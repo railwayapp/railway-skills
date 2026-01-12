@@ -46,7 +46,7 @@ Extract:
 Get workspace ID:
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query getWorkspace($projectId: String!) {
     project(id: $projectId) { workspaceId }
   }' \
@@ -60,7 +60,7 @@ List available templates with optional filters:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query templates($first: Int, $verified: Boolean) {
     templates(first: $first, verified: $verified) {
       edges {
@@ -95,7 +95,7 @@ Fetch a specific template by code:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query template($code: String!) {
     template(code: $code) {
       id
@@ -118,7 +118,7 @@ Returns:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query template($code: String!) {
     template(code: $code) {
       id
@@ -133,7 +133,7 @@ SCRIPT
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation deployTemplate($input: TemplateDeployV2Input!) {
     templateDeployV2(input: $input) {
       projectId
@@ -158,7 +158,7 @@ SCRIPT
 
 After deploying a template, connect other services using reference variables.
 
-For complete variable syntax and wiring patterns, see [variables.md](../reference/variables.md).
+For complete variable syntax and wiring patterns, see [variables.md](references/variables.md).
 
 ### Pattern
 
@@ -195,17 +195,17 @@ railway status --json
 # → project.id = "proj-123", environment.id = "env-456"
 
 # 2. Get workspace ID
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query { project(id: "proj-123") { workspaceId } }' '{}'
 # → workspaceId = "ws-789"
 
 # 3. Fetch Postgres template
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query { template(code: "postgres") { id serializedConfig } }' '{}'
 # → id = "template-abc", serializedConfig = {...}
 
 # 4. Deploy
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation deploy($input: TemplateDeployV2Input!) {
     templateDeployV2(input: $input) { projectId workflowId }
   }' \
@@ -224,7 +224,7 @@ SCRIPT
 ```bash
 bash <<'SCRIPT'
 # Search verified templates
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query {
     templates(first: 50, verified: true) {
       edges {

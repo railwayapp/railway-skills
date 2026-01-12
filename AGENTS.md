@@ -29,19 +29,13 @@ available in CLI.
 
 Token location: `~/.railway/config.json` → `user.token`
 
-Use `${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<query>' '<variables-json>'` to make
-authenticated requests. This helper reads the token and handles auth headers.
+Each skill that needs GraphQL has `scripts/railway-api.sh` for authenticated requests:
 
 ```bash
-# Query with variables
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+# From within a skill directory
+scripts/railway-api.sh \
   'query getEnv($id: String!) { environment(id: $id) { name } }' \
   '{"id": "env-uuid"}'
-
-# Mutation with variables
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
-  'mutation update($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { name } }' \
-  '{"id": "proj-uuid", "input": {"name": "new-name"}}'
 ```
 
 API docs: https://docs.railway.com/api/llms-docs.md
@@ -59,11 +53,22 @@ curl -s https://backboard.railway.com/graphql/v2 \
 Skills build on each other. Base skills (`status`, `service-status`) provide
 preflight checks that operation skills can reference before making changes.
 
-Shared utilities in `plugins/railway/skills/lib/`:
+## Shared Files
 
-- `railway-common.sh` - CLI preflight checks (is CLI installed, authenticated,
-  project linked)
-- `railway-api.sh` - GraphQL API helper
+Scripts and references are shared across skills. Canonical versions live in
+`plugins/railway/skills/_shared/`. Each skill has its own copy for portability.
+
+**DO NOT edit files in individual skill `scripts/` or `references/` directories.**
+Edit the canonical version in `_shared/`, then run:
+
+```bash
+./scripts/sync-shared.sh
+```
+
+Shared files:
+- `_shared/scripts/railway-api.sh` - GraphQL API helper
+- `_shared/scripts/railway-common.sh` - CLI preflight checks
+- `_shared/references/*.md` - Config schemas, variable patterns, etc.
 
 ## Adding New Skills
 

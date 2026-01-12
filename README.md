@@ -4,34 +4,38 @@ Agent skills for [Railway](https://railway.com), following the [Agent Skills](ht
 
 ## Installation
 
-### Claude Code (via Marketplace)
+```bash
+curl -fsSL https://raw.githubusercontent.com/railwayapp/railway-skills/main/scripts/install.sh | bash
+```
+
+Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Re-run to update.
+
+### Manual Installation
+
+<details>
+<summary>Claude Code (plugin)</summary>
 
 ```bash
 claude plugin marketplace add railwayapp/railway-claude-plugin
 claude plugin install railway@railway-claude-plugin
 ```
 
-### Claude Code (from local clone)
-
-```bash
-git clone git@github.com:railwayapp/railway-claude-plugin.git ~/railway-claude-plugin
-claude --plugin-dir ~/railway-claude-plugin/plugins/railway
-```
-
-Skills are invoked automatically when relevant.
-
-### Updating
-
+Update with:
 ```bash
 claude plugin marketplace update
 claude plugin update railway@railway-claude-plugin
 ```
+</details>
 
-Or use `/plugin` to open the interactive plugin manager.
+<details>
+<summary>Local skills copy (any agent)</summary>
 
-### Other Agents
-
-Copy `plugins/railway/skills/` to your agent's skills location, or reference the SKILL.md files directly.
+Copy `plugins/railway/skills/` to your agent's skills directory:
+- Claude: `~/.claude/skills/`
+- Codex: `~/.codex/skills/`
+- OpenCode: `~/.config/opencode/skill/`
+- Cursor: `~/.cursor/skills/`
+</details>
 
 ## Available Skills
 
@@ -57,22 +61,22 @@ This plugin includes a PreToolUse hook that auto-approves `railway-api.sh` calls
 ## Repository Structure
 
 ```
-railway-claude-plugin/
-├── .claude-plugin/
-│   └── marketplace.json
-├── plugins/
-│   └── railway/
-│       ├── .claude-plugin/
-│       │   └── plugin.json
-│       ├── hooks/
-│       │   ├── hooks.json
-│       │   └── auto-approve-api.sh
-│       └── skills/
-│           ├── lib/
-│           ├── reference/
-│           └── {skill-name}/SKILL.md
-├── AGENTS.md
-├── CLAUDE.md → AGENTS.md
+railway-skills/
+├── plugins/railway/
+│   ├── .claude-plugin/
+│   │   └── plugin.json
+│   ├── hooks/
+│   └── skills/
+│       ├── _shared/           # Canonical shared files
+│       │   ├── scripts/
+│       │   └── references/
+│       └── {skill-name}/
+│           ├── SKILL.md
+│           ├── scripts/       # Copied from _shared
+│           └── references/    # Copied from _shared
+├── scripts/
+│   ├── install.sh             # Universal installer
+│   └── sync-shared.sh         # Sync shared files
 └── README.md
 ```
 
@@ -94,6 +98,20 @@ Step-by-step guidance for the agent.
 
 Concrete examples showing expected input/output.
 ```
+
+## Development
+
+### Shared Files
+
+Scripts (`railway-api.sh`) and references (`variables.md`, etc.) are shared across skills.
+Canonical versions live in `plugins/railway/skills/_shared/`.
+
+After editing files in `_shared/`, run:
+```bash
+./scripts/sync-shared.sh
+```
+
+This copies shared files to each skill. Do not edit copies in individual skills directly.
 
 ## References
 
