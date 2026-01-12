@@ -102,7 +102,7 @@ printf "    ${BOLD}3)${NO_COLOR} OpenCode\n"
 printf "    ${BOLD}4)${NO_COLOR} Cursor\n"
 printf "\n"
 printf "${MAGENTA}?${NO_COLOR} Choice ${BOLD}[1-4]${NO_COLOR}: "
-read -r choice
+read -r choice </dev/tty
 
 case $choice in
   1)
@@ -112,7 +112,7 @@ case $choice in
     printf "    ${BOLD}2)${NO_COLOR} Local skills copy\n"
     printf "\n"
     printf "${MAGENTA}?${NO_COLOR} Choice ${BOLD}[1-2]${NO_COLOR}: "
-    read -r claude_choice
+    read -r claude_choice </dev/tty
 
     case $claude_choice in
       1)
