@@ -60,7 +60,7 @@ mutation serviceCreate($input: ServiceCreateInput!) {
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation createService($input: ServiceCreateInput!) {
     serviceCreate(input: $input) { id name }
   }' \
@@ -72,7 +72,7 @@ SCRIPT
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation createService($input: ServiceCreateInput!) {
     serviceCreate(input: $input) { id name }
   }' \
@@ -111,7 +111,7 @@ Use `environment` skill to configure the service instance:
 
 Then use `environment` skill to apply and deploy.
 
-For variable references, see [reference/variables.md](../reference/variables.md).
+For variable references, see [reference/variables.md](references/variables.md).
 
 ## Check Service Status
 
@@ -162,7 +162,7 @@ Extract `service.id` from the response.
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation updateService($id: String!, $input: ServiceUpdateInput!) {
     serviceUpdate(id: $id, input: $input) { id name }
   }' \
@@ -184,7 +184,7 @@ Icons can be image URLs or animated GIFs.
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation updateService($id: String!, $input: ServiceUpdateInput!) {
     serviceUpdate(id: $id, input: $input) { id icon }
   }' \

@@ -73,7 +73,7 @@ Extract `project.id` from the response.
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation updateProject($id: String!, $input: ProjectUpdateInput!) {
     projectUpdate(id: $id, input: $input) { name prDeploys isPublic botPrEnvironments }
   }' \
@@ -95,22 +95,22 @@ SCRIPT
 
 **Rename project:**
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name"}}'
+scripts/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name"}}'
 ```
 
 **Enable PR deploys:**
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"prDeploys": true}}'
+scripts/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"prDeploys": true}}'
 ```
 
 **Make project public:**
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"isPublic": true}}'
+scripts/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"isPublic": true}}'
 ```
 
 **Multiple fields:**
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name", "prDeploys": true}}'
+scripts/railway-api.sh '<mutation>' '{"id": "uuid", "input": {"name": "new-name", "prDeploys": true}}'
 ```
 
 ## Composability

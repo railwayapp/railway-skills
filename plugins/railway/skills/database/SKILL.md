@@ -53,7 +53,7 @@ skill
 
 Before creating a database, check if one already exists.
 
-For full environment config structure, see [environment-config.md](../reference/environment-config.md).
+For full environment config structure, see [environment-config.md](references/environment-config.md).
 
 ```bash
 railway status --json
@@ -99,7 +99,7 @@ Extract:
 Get workspace ID (not in status output):
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query getWorkspace($projectId: String!) {
     project(id: $projectId) { workspaceId }
   }' \
@@ -113,7 +113,7 @@ SCRIPT
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query template($code: String!) {
     template(code: $code) {
       id
@@ -131,7 +131,7 @@ This returns the template's `id` and `serializedConfig` needed for deployment.
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation deployTemplate($input: TemplateDeployV2Input!) {
     templateDeployV2(input: $input) {
       projectId
@@ -156,7 +156,7 @@ SCRIPT
 
 After deployment, other services connect using reference variables.
 
-For complete variable reference syntax and wiring patterns, see [variables.md](../reference/variables.md).
+For complete variable reference syntax and wiring patterns, see [variables.md](references/variables.md).
 
 ### Backend Services (Server-side)
 
@@ -188,15 +188,15 @@ railway status --json
 # Extract project.id and environment.id
 
 # 2. Get workspace ID
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query { project(id: "proj-id") { workspaceId } }' '{}'
 
 # 3. Fetch Postgres template
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query { template(code: "postgres") { id serializedConfig } }' '{}'
 
 # 4. Deploy template
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation deploy($input: TemplateDeployV2Input!) {
     templateDeployV2(input: $input) { projectId workflowId }
   }' \

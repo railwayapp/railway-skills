@@ -221,8 +221,8 @@ Flow:
 
 ### Configure Based on Project Type
 
-Reference [railpack.md](../reference/railpack.md) for build configuration.
-Reference [monorepo.md](../reference/monorepo.md) for monorepo patterns.
+Reference [railpack.md](references/railpack.md) for build configuration.
+Reference [monorepo.md](references/monorepo.md) for monorepo patterns.
 
 **Static site (Vite, CRA, Astro static):**
 
@@ -264,7 +264,7 @@ Reference [monorepo.md](../reference/monorepo.md) for monorepo patterns.
   - Turborepo: `turbo run build --filter=<package>`
 - Set watch paths to prevent unnecessary rebuilds
 
-See [monorepo.md](../reference/monorepo.md) for detailed patterns.
+See [monorepo.md](references/monorepo.md) for detailed patterns.
 
 ## Project Setup Guidance
 
@@ -290,7 +290,7 @@ Check for existing project files:
 
 ### Scaffolding Hints
 
-If no code exists, suggest minimal patterns from [railpack.md](../reference/railpack.md):
+If no code exists, suggest minimal patterns from [railpack.md](references/railpack.md):
 
 **Static site:**
 

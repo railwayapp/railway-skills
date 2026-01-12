@@ -104,7 +104,7 @@ VARS=$(jq -n \
   --arg start "$START_DATE" \
   '{environmentId: $env, serviceId: $svc, startDate: $start, measurements: ["CPU_USAGE", "MEMORY_USAGE_GB"]}')
 
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query metrics($environmentId: String!, $serviceId: String, $startDate: DateTime!, $measurements: [MetricMeasurement!]!) {
     metrics(environmentId: $environmentId, serviceId: $serviceId, startDate: $startDate, measurements: $measurements) {
       measurement
@@ -130,7 +130,7 @@ VARS=$(jq -n \
   --arg start "$START_DATE" \
   '{environmentId: $env, startDate: $start, measurements: ["CPU_USAGE", "MEMORY_USAGE_GB"], groupBy: ["SERVICE_ID"]}')
 
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query metrics($environmentId: String!, $startDate: DateTime!, $measurements: [MetricMeasurement!]!, $groupBy: [MetricTag!]) {
     metrics(environmentId: $environmentId, startDate: $startDate, measurements: $measurements, groupBy: $groupBy) {
       measurement

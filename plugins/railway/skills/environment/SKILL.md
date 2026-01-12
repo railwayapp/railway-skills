@@ -15,7 +15,7 @@ Query, stage, and apply configuration changes for Railway environments.
 Run `railway status --json` to get the environment ID, then **always** query the full config:
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query envConfig($envId: String!) {
     environment(id: $envId) { id config }
   }' \
@@ -37,7 +37,7 @@ For mutations (add/change/delete), see sections below.
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh 'query ...' '{"var": "value"}'
+scripts/railway-api.sh 'query ...' '{"var": "value"}'
 SCRIPT
 ```
 
@@ -155,7 +155,7 @@ Example:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'query envConfig($envId: String!) {
     environment(id: $envId) { id config(decryptVariables: false) }
     environmentStagedChanges(environmentId: $envId) { id patch(decryptVariables: false) }
@@ -188,9 +188,9 @@ The `config` field contains current configuration:
 
 The `patch` field in `environmentStagedChanges` contains pending changes. The effective configuration is the base `config` merged with the staged `patch`.
 
-For complete field reference, see [reference/environment-config.md](../reference/environment-config.md).
+For complete field reference, see [reference/environment-config.md](references/environment-config.md).
 
-For variable syntax and service wiring patterns, see [reference/variables.md](../reference/variables.md).
+For variable syntax and service wiring patterns, see [reference/variables.md](references/variables.md).
 
 ## Get Rendered Variables
 
@@ -237,7 +237,7 @@ Example:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
     environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
   }' \
@@ -251,7 +251,7 @@ Use `isDeleted: true`:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
     environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
   }' \
@@ -281,7 +281,7 @@ Example:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation patchCommit($environmentId: String!, $patch: EnvironmentConfig, $commitMessage: String) {
     environmentPatchCommit(environmentId: $environmentId, patch: $patch, commitMessage: $commitMessage)
   }' \
@@ -321,7 +321,7 @@ Example:
 
 ```bash
 bash <<'SCRIPT'
-${CLAUDE_PLUGIN_ROOT}/skills/lib/railway-api.sh \
+scripts/railway-api.sh \
   'mutation commitStaged($environmentId: String!, $message: String) {
     environmentPatchCommitStaged(environmentId: $environmentId, commitMessage: $message)
   }' \
