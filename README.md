@@ -16,14 +16,14 @@ Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Re-run to update.
 <summary>Claude Code (plugin)</summary>
 
 ```bash
-claude plugin marketplace add railwayapp/railway
-claude plugin install railway@railway
+claude plugin marketplace add railwayapp/railway-skills
+claude plugin install railway@railway-skills
 ```
 
 Update with:
 ```bash
 claude plugin marketplace update
-claude plugin update railway@railway
+claude plugin update railway@railway-skills
 ```
 </details>
 
