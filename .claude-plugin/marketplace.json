@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "railway-claude-plugin",
+  "name": "railway-skills",
   "description": "Railway agent skills for Claude Code",
   "owner": {
     "name": "Railway",
