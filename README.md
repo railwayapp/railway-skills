@@ -5,7 +5,7 @@ Agent skills for [Railway](https://railway.com), following the [Agent Skills](ht
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/railwayapp/railway-skills/main/scripts/install.sh | bash
+curl -fsSL railway.com/skills.sh | bash
 ```
 
 Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Re-run to update.
@@ -16,14 +16,14 @@ Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Re-run to update.
 <summary>Claude Code (plugin)</summary>
 
 ```bash
-claude plugin marketplace add railwayapp/railway-claude-plugin
-claude plugin install railway@railway-claude-plugin
+claude plugin marketplace add railwayapp/railway
+claude plugin install railway@railway
 ```
 
 Update with:
 ```bash
 claude plugin marketplace update
-claude plugin update railway@railway-claude-plugin
+claude plugin update railway@railway
 ```
 </details>
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-REPO="https://github.com/railwayapp/railway-skills"
+REPO="https://github.com/railwayapp/railway"
 
 # Colors
 BOLD="$(tput bold 2>/dev/null || printf '')"
@@ -119,9 +119,9 @@ case $choice in
         printf "\n"
         if command -v claude &>/dev/null; then
           info "Adding marketplace source..."
-          claude plugin marketplace add railwayapp/railway-claude-plugin
+          claude plugin marketplace add railwayapp/railway
           info "Installing plugin..."
-          claude plugin install railway@railway-claude-plugin
+          claude plugin install railway@railway
           printf "\n"
           print_success
           warn "Restart Claude Code to load the plugin."
@@ -129,8 +129,8 @@ case $choice in
           error "Claude CLI not found."
           printf "\n"
           info "Install manually:"
-          printf "  ${CYAN}claude plugin marketplace add railwayapp/railway-claude-plugin${NO_COLOR}\n"
-          printf "  ${CYAN}claude plugin install railway@railway-claude-plugin${NO_COLOR}\n"
+          printf "  ${CYAN}claude plugin marketplace add railwayapp/railway${NO_COLOR}\n"
+          printf "  ${CYAN}claude plugin install railway@railway${NO_COLOR}\n"
         fi
         ;;
       2)
