@@ -37,7 +37,7 @@ Search and browse Railway's Central Station - the community support platform for
 
 For official Railway documentation, use the `railway-docs` skill which fetches from `https://docs.railway.com/api/llms-docs.md`.
 
-Central Station's `unifiedSearch` can search both threads and docs when available:
+Central Station's `unifiedSearch` can identify document types but has limited field access:
 
 ```bash
 curl -s 'https://station-server.railway.com/gql' \
@@ -46,6 +46,8 @@ curl -s 'https://station-server.railway.com/gql' \
 ```
 
 Document types returned: `EsThreadItem` (threads) and `DocSearchResult` (docs).
+
+**Note**: For searching thread content, use the LLM Data Export endpoint instead (see below) which provides full thread data.
 
 ## Quick Actions
 
@@ -79,16 +81,16 @@ curl -s 'https://station-server.railway.com/gql' \
 
 ### Get Thread as Markdown
 
-For a cleaner read, fetch the thread as markdown. Three options:
+For a cleaner read, fetch the thread as markdown:
 
 ```bash
-# Append .md to the slug
-curl -s 'https://station-server.railway.com/api/threads/THREAD_SLUG.md'
+# Append .md to the frontend URL (requires topic slug)
+curl -s 'https://station.railway.com/TOPIC_SLUG/THREAD_SLUG.md'
 
-# Add format query parameter
+# Or use API with format query parameter
 curl -s 'https://station-server.railway.com/api/threads/THREAD_SLUG?format=md'
 
-# Send Accept header
+# Or use API with Accept header
 curl -s 'https://station-server.railway.com/api/threads/THREAD_SLUG' \
   -H 'Accept: text/markdown'
 ```
