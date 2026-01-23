@@ -8,6 +8,14 @@ Agent skills for [Railway](https://railway.com), following the [Agent Skills](ht
 curl -fsSL railway.com/skills.sh | bash
 ```
 
+You can also install via [skills.sh](https://skills.sh)
+
+```bash
+npx skills add railwayapp/railway-skills 
+```
+
+This will allow you to pick and choose which skills to install.
+
 Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Re-run to update.
 
 ### Manual Installation
