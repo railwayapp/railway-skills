@@ -99,6 +99,22 @@ for target in "${FOUND[@]}"; do
   install_skills "$dir" "$name" "$temp_dir"
 done
 
+# Local installs (skip if CWD is $HOME)
+if [ "$(pwd)" != "$HOME" ]; then
+  declare -a LOCAL_TARGETS=(
+    ".claude/skills|Claude Code (local)"
+    ".codex/skills|OpenAI Codex (local)"
+    ".config/opencode/skill|OpenCode (local)"
+    ".cursor/skills|Cursor (local)"
+  )
+  for target in "${LOCAL_TARGETS[@]}"; do
+    dir="${target%%|*}"
+    name="${target##*|}"
+    parent="${dir%/*}"
+    [ -d "./$parent" ] && install_skills "./$dir" "$name" "$temp_dir"
+  done
+fi
+
 rm -rf "$temp_dir"
 
 printf "\n"
