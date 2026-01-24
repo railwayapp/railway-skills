@@ -95,15 +95,21 @@ railway environment <environment-id>
 
 ## Get Context
 
+**JSON output** - project/environment IDs:
 ```bash
 railway status --json
 ```
 
 Extract:
-
 - `project.id` - for service lookup
-- `environment.id` - for the mutations
-- `service.id` - default service if user doesn't specify one
+- `environment.id` - for mutations
+
+**Plain output** - linked service name:
+```bash
+railway status
+```
+
+Shows `Service: <name>` line with the currently linked service. Use the `projectServices` query below to resolve the name to an ID.
 
 ### Resolve Service ID
 
