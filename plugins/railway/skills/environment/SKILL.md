@@ -6,42 +6,35 @@ allowed-tools: Bash(railway:*)
 
 # Environment Configuration
 
-Query, stage, and apply configuration changes for Railway environments.
+Read and edit Railway environment configuration using the CLI.
+
+## Prerequisites
+
+Requires Railway CLI **v4.27.3+**. Check with:
+```bash
+railway --version
+```
+
+If below 4.27.3, upgrade:
+```bash
+railway upgrade
+```
 
 ## Quick Actions
 
 **When user asks "what's the config" or "show configuration":**
 
-Run `railway status --json` to get the environment ID, then **always** query the full config:
 ```bash
-bash <<'SCRIPT'
-scripts/railway-api.sh \
-  'query envConfig($envId: String!) {
-    environment(id: $envId) { id config }
-  }' \
-  '{"envId": "ENV_ID_FROM_STATUS"}'
-SCRIPT
+railway environment config --json
 ```
+
 Present: source (repo/image), build settings, deploy settings, variables per service.
 
 **When user asks "what variables" or "show env vars":**
-Use the same environment config query above - it includes variables per service and shared variables.
+
+Same command — `railway environment config --json` includes variables per service and shared variables.
 
 For **rendered** (resolved) variable values: `railway variables --json`
-
-For mutations (add/change/delete), see sections below.
-
-## Shell Escaping
-
-**CRITICAL:** When running GraphQL queries via bash, you MUST wrap in heredoc to prevent shell escaping issues:
-
-```bash
-bash <<'SCRIPT'
-scripts/railway-api.sh 'query ...' '{"var": "value"}'
-SCRIPT
-```
-
-Without the heredoc wrapper, multi-line commands break and exclamation marks in GraphQL non-null types get escaped, causing query failures.
 
 ## When to Use
 
@@ -56,7 +49,6 @@ Without the heredoc wrapper, multi-line commands break and exclamation marks in 
 - User wants to add/update/delete environment variables
 - User wants to change replica count or configure health checks
 - User asks to delete a service, volume, or bucket
-- User says "apply changes", "commit changes", "deploy changes"
 - Auto-fixing build errors detected in logs
 
 ## Create Environment
@@ -95,84 +87,45 @@ railway environment <environment-id>
 
 ## Get Context
 
-**JSON output** - project/environment IDs:
+**JSON output** — project/environment IDs and service list:
 ```bash
 railway status --json
 ```
 
 Extract:
-- `project.id` - for service lookup
-- `environment.id` - for mutations
+- `project.id` — project ID
+- `environment.id` — environment ID
 
-**Plain output** - linked service name:
+**Plain output** — linked service name:
 ```bash
 railway status
 ```
 
-Shows `Service: <name>` line with the currently linked service. Use the `projectServices` query below to resolve the name to an ID.
+Shows `Service: <name>` line with the currently linked service.
 
 ### Resolve Service ID
 
-If user specifies a service by name, query project services:
-
-```graphql
-query projectServices($projectId: String!) {
-  project(id: $projectId) {
-    services {
-      edges {
-        node {
-          id
-          name
-        }
-      }
-    }
-  }
-}
+Get service IDs from the environment config:
+```bash
+railway environment config --json | jq '.services | keys'
 ```
 
-Match the service name (case-insensitive) to get the service ID.
-
-## Query Configuration
-
-Fetch current environment configuration and staged changes.
-
-```graphql
-query environmentConfig($environmentId: String!) {
-  environment(id: $environmentId) {
-    id
-    config(decryptVariables: false)
-    serviceInstances {
-      edges {
-        node {
-          id
-          serviceId
-        }
-      }
-    }
-  }
-  environmentStagedChanges(environmentId: $environmentId) {
-    id
-    patch(decryptVariables: false)
-  }
-}
+Map service IDs to names via status:
+```bash
+railway status --json
 ```
 
-Example:
+The `project.services` array contains `{ id, name }` for each service. Match against the service keys from `environment config`.
+
+## Read Configuration
+
+Fetch current environment configuration:
 
 ```bash
-bash <<'SCRIPT'
-scripts/railway-api.sh \
-  'query envConfig($envId: String!) {
-    environment(id: $envId) { id config(decryptVariables: false) }
-    environmentStagedChanges(environmentId: $envId) { id patch(decryptVariables: false) }
-  }' \
-  '{"envId": "ENV_ID"}'
-SCRIPT
+railway environment config --json
 ```
 
 ### Response Structure
-
-The `config` field contains current configuration:
 
 ```json
 {
@@ -192,15 +145,13 @@ The `config` field contains current configuration:
 }
 ```
 
-The `patch` field in `environmentStagedChanges` contains pending changes. The effective configuration is the base `config` merged with the staged `patch`.
-
 For complete field reference, see [reference/environment-config.md](references/environment-config.md).
 
 For variable syntax and service wiring patterns, see [reference/variables.md](references/variables.md).
 
 ## Get Rendered Variables
 
-The GraphQL queries above return **unrendered** variables - template syntax like `${{shared.DOMAIN}}` is preserved. This is correct for management/editing.
+`environment config` returns **unrendered** variables — template syntax like `${{shared.DOMAIN}}` is preserved. This is correct for management/editing.
 
 To see **rendered** (resolved) values as they appear at runtime:
 
@@ -217,169 +168,59 @@ railway variables --service <service-name> --json
 - Verifying variable resolution is correct
 - Viewing Railway-injected values (RAILWAY_*)
 
-## Stage Changes
+## Edit Configuration
 
-Stage configuration changes via the `environmentStageChanges` mutation. Use `merge: true` to automatically merge with existing staged changes.
-
-```graphql
-mutation stageEnvironmentChanges(
-  $environmentId: String!
-  $input: EnvironmentConfig!
-  $merge: Boolean
-) {
-  environmentStageChanges(
-    environmentId: $environmentId
-    input: $input
-    merge: $merge
-  ) {
-    id
-  }
-}
-```
-
-**Important:** Always use variables (not inline input) because service IDs are UUIDs which can't be used as unquoted GraphQL object keys.
-
-Example:
+Pipe a JSON patch to `railway environment edit` to apply changes. The patch is merged with existing config and committed immediately, triggering deploys.
 
 ```bash
-bash <<'SCRIPT'
-scripts/railway-api.sh \
-  'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
-    environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
-  }' \
-  '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"build": {"buildCommand": "npm run build"}}}}, "merge": true}'
-SCRIPT
+echo '<json-patch>' | railway environment edit --json
 ```
 
-### Delete Service
-
-Use `isDeleted: true`:
+With a commit message:
 
 ```bash
-bash <<'SCRIPT'
-scripts/railway-api.sh \
-  'mutation stageChanges($environmentId: String!, $input: EnvironmentConfig!, $merge: Boolean) {
-    environmentStageChanges(environmentId: $environmentId, input: $input, merge: $merge) { id }
-  }' \
-  '{"environmentId": "ENV_ID", "input": {"services": {"SERVICE_ID": {"isDeleted": true}}}, "merge": true}'
-SCRIPT
+echo '<json-patch>' | railway environment edit -m "description of change" --json
 ```
 
-## Stage and Apply Immediately
+### Examples
 
-For single changes that should deploy right away, use `environmentPatchCommit` to stage and apply in one call.
-
-```graphql
-mutation environmentPatchCommit(
-  $environmentId: String!
-  $patch: EnvironmentConfig
-  $commitMessage: String
-) {
-  environmentPatchCommit(
-    environmentId: $environmentId
-    patch: $patch
-    commitMessage: $commitMessage
-  )
-}
+**Set build command:**
+```bash
+echo '{"services":{"SERVICE_ID":{"build":{"buildCommand":"npm run build"}}}}' | railway environment edit --json
 ```
 
-Example:
+**Add variable:**
+```bash
+echo '{"services":{"SERVICE_ID":{"variables":{"API_KEY":{"value":"secret"}}}}}' | railway environment edit -m "add API_KEY" --json
+```
+
+**Delete variable:**
+```bash
+echo '{"services":{"SERVICE_ID":{"variables":{"OLD_VAR":null}}}}' | railway environment edit --json
+```
+
+**Delete service:**
+```bash
+echo '{"services":{"SERVICE_ID":{"isDeleted":true}}}' | railway environment edit --json
+```
+
+**Set replicas:**
+```bash
+echo '{"services":{"SERVICE_ID":{"deploy":{"multiRegionConfig":{"us-west2":{"numReplicas":3}}}}}}' | railway environment edit --json
+```
+
+**Add shared variable:**
+```bash
+echo '{"sharedVariables":{"DATABASE_URL":{"value":"postgres://..."}}}' | railway environment edit --json
+```
+
+### Batching Multiple Changes
+
+Include multiple fields in a single patch to apply them atomically:
 
 ```bash
-bash <<'SCRIPT'
-scripts/railway-api.sh \
-  'mutation patchCommit($environmentId: String!, $patch: EnvironmentConfig, $commitMessage: String) {
-    environmentPatchCommit(environmentId: $environmentId, patch: $patch, commitMessage: $commitMessage)
-  }' \
-  '{"environmentId": "ENV_ID", "patch": {"services": {"SERVICE_ID": {"variables": {"API_KEY": {"value": "secret"}}}}}, "commitMessage": "add API_KEY"}'
-SCRIPT
+echo '{"services":{"SERVICE_ID":{"build":{"buildCommand":"npm run build"},"deploy":{"startCommand":"npm start"},"variables":{"NODE_ENV":{"value":"production"}}}}}' | railway environment edit -m "configure build, start, and env" --json
 ```
-
-**When to use:** Single change, no need to batch, user wants immediate deployment.
-
-**When NOT to use:** Multiple related changes to batch, or user says "stage only" / "don't deploy yet".
-
-## Apply Staged Changes
-
-Commit staged changes and trigger deployments.
-
-**Note:** There is no `railway apply` CLI command. Use the mutation below or direct users to the web UI.
-
-### Apply Mutation
-
-**Mutation name: `environmentPatchCommitStaged`**
-
-```graphql
-mutation environmentPatchCommitStaged(
-  $environmentId: String!
-  $message: String
-  $skipDeploys: Boolean
-) {
-  environmentPatchCommitStaged(
-    environmentId: $environmentId
-    commitMessage: $message
-    skipDeploys: $skipDeploys
-  )
-}
-```
-
-Example:
-
-```bash
-bash <<'SCRIPT'
-scripts/railway-api.sh \
-  'mutation commitStaged($environmentId: String!, $message: String) {
-    environmentPatchCommitStaged(environmentId: $environmentId, commitMessage: $message)
-  }' \
-  '{"environmentId": "ENV_ID", "message": "add API_KEY variable"}'
-SCRIPT
-```
-
-### Parameters
-
-| Field           | Type    | Default | Description                                 |
-| --------------- | ------- | ------- | ------------------------------------------- |
-| `environmentId` | String! | -       | Environment ID from status                  |
-| `message`       | String  | null    | Short description of changes                |
-| `skipDeploys`   | Boolean | false   | Skip deploys (only if user explicitly asks) |
-
-### Commit Message
-
-Keep very short - one sentence max. Examples:
-
-- "set build command to fix npm error"
-- "add API_KEY variable"
-- "increase replicas to 3"
-
-Leave empty if no meaningful description.
-
-### Default Behavior
-
-**Always deploy** unless user explicitly asks to skip. Only set `skipDeploys: true` if user says "apply without deploying", "commit but don't deploy", or "skip deploys".
-
-Returns a workflow ID (string) on success.
-
-## Auto-Apply Behavior
-
-By default, **apply changes immediately**.
-
-### Flow
-
-**Single change:** Use `environmentPatchCommit` to stage and apply in one call.
-
-**Multiple changes or batching:** Use `environmentStageChanges` with `merge: true` for each change, then `environmentPatchCommitStaged` to apply.
-
-### When NOT to Auto-Apply
-
-- User explicitly says "stage only", "don't deploy yet", or similar
-- User is making multiple related changes that should deploy together
-
-**When you don't auto-apply, tell the user:**
-
-> Changes staged. Apply them at: https://railway.com/project/{projectId}
-> Or ask me to apply them.
-
-Get `projectId` from `railway status --json` → `project.id`
 
 ## Error Handling
 
@@ -388,14 +229,6 @@ Get `projectId` from `railway status --json` → `project.id`
 ```
 Service "foo" not found in project. Available services: api, web, worker
 ```
-
-### No Staged Changes
-
-```
-No patch to apply
-```
-
-There are no staged changes to commit. Stage changes first.
 
 ### Invalid Configuration
 

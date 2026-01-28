@@ -23,6 +23,8 @@ The `EnvironmentConfig` object is used to configure services, volumes, and share
 
 Only include fields being changed. The patch is merged with existing config.
 
+Apply changes via CLI: `echo '<json>' | railway environment edit --json`
+
 ## Service Config
 
 ### Source
@@ -130,6 +132,7 @@ Controls replica count per region. Structure: region name → `{ numReplicas }` 
 ```json
 { "services": { "<serviceId>": { "variables": { "OLD_VAR": null } } } }
 ```
+Via CLI: `echo '{"services":{"<serviceId>":{"variables":{"OLD_VAR":null}}}}' | railway environment edit --json`
 
 ### Add Shared Variable
 ```json
@@ -165,6 +168,7 @@ Controls replica count per region. Structure: region name → `{ numReplicas }` 
 ```json
 { "services": { "<serviceId>": { "isDeleted": true } } }
 ```
+Via CLI: `echo '{"services":{"<serviceId>":{"isDeleted":true}}}' | railway environment edit --json`
 
 ### Delete Volume
 ```json
