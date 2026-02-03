@@ -170,48 +170,48 @@ railway variables --service <service-name> --json
 
 ## Edit Configuration
 
-Pipe a JSON patch to `railway environment edit` to apply changes. The patch is merged with existing config and committed immediately, triggering deploys.
+Pass a JSON patch to `railway environment edit` to apply changes. The patch is merged with existing config and committed immediately, triggering deploys.
 
 ```bash
-echo '<json-patch>' | railway environment edit --json
+railway environment edit --json <<< '<json-patch>'
 ```
 
 With a commit message:
 
 ```bash
-echo '<json-patch>' | railway environment edit -m "description of change" --json
+railway environment edit -m "description of change" --json <<< '<json-patch>'
 ```
 
 ### Examples
 
 **Set build command:**
 ```bash
-echo '{"services":{"SERVICE_ID":{"build":{"buildCommand":"npm run build"}}}}' | railway environment edit --json
+railway environment edit --json <<< '{"services":{"SERVICE_ID":{"build":{"buildCommand":"npm run build"}}}}'
 ```
 
 **Add variable:**
 ```bash
-echo '{"services":{"SERVICE_ID":{"variables":{"API_KEY":{"value":"secret"}}}}}' | railway environment edit -m "add API_KEY" --json
+railway environment edit -m "add API_KEY" --json <<< '{"services":{"SERVICE_ID":{"variables":{"API_KEY":{"value":"secret"}}}}}'
 ```
 
 **Delete variable:**
 ```bash
-echo '{"services":{"SERVICE_ID":{"variables":{"OLD_VAR":null}}}}' | railway environment edit --json
+railway environment edit --json <<< '{"services":{"SERVICE_ID":{"variables":{"OLD_VAR":null}}}}'
 ```
 
 **Delete service:**
 ```bash
-echo '{"services":{"SERVICE_ID":{"isDeleted":true}}}' | railway environment edit --json
+railway environment edit --json <<< '{"services":{"SERVICE_ID":{"isDeleted":true}}}'
 ```
 
 **Set replicas:**
 ```bash
-echo '{"services":{"SERVICE_ID":{"deploy":{"multiRegionConfig":{"us-west2":{"numReplicas":3}}}}}}' | railway environment edit --json
+railway environment edit --json <<< '{"services":{"SERVICE_ID":{"deploy":{"multiRegionConfig":{"us-west2":{"numReplicas":3}}}}}}'
 ```
 
 **Add shared variable:**
 ```bash
-echo '{"sharedVariables":{"DATABASE_URL":{"value":"postgres://..."}}}' | railway environment edit --json
+railway environment edit --json <<< '{"sharedVariables":{"DATABASE_URL":{"value":"postgres://..."}}}'
 ```
 
 ### Batching Multiple Changes
@@ -219,7 +219,7 @@ echo '{"sharedVariables":{"DATABASE_URL":{"value":"postgres://..."}}}' | railway
 Include multiple fields in a single patch to apply them atomically:
 
 ```bash
-echo '{"services":{"SERVICE_ID":{"build":{"buildCommand":"npm run build"},"deploy":{"startCommand":"npm start"},"variables":{"NODE_ENV":{"value":"production"}}}}}' | railway environment edit -m "configure build, start, and env" --json
+railway environment edit -m "configure build, start, and env" --json <<< '{"services":{"SERVICE_ID":{"build":{"buildCommand":"npm run build"},"deploy":{"startCommand":"npm start"},"variables":{"NODE_ENV":{"value":"production"}}}}}'
 ```
 
 ## Error Handling
