@@ -39,6 +39,29 @@ check_railway_linked() {
   fi
 }
 
+check_railway_version() {
+  local required="${1:-4.27.3}"
+  local version
+  version=$(railway --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+
+  if [[ -z "$version" ]]; then
+    echo '{"ok": false, "error": "Could not determine Railway CLI version"}'
+    return 1
+  fi
+
+  # Compare versions using sort -V
+  local lowest
+  lowest=$(printf '%s\n%s' "$required" "$version" | sort -V | head -n1)
+
+  if [[ "$lowest" == "$required" ]]; then
+    echo "{\"ok\": true, \"version\": \"$version\"}"
+    return 0
+  else
+    echo "{\"ok\": false, \"version\": \"$version\", \"required\": \"$required\", \"error\": \"Railway CLI $version is below required $required. Run: railway upgrade\"}"
+    return 1
+  fi
+}
+
 railway_preflight() {
   # Check CLI installed
   if ! command -v railway &>/dev/null; then
