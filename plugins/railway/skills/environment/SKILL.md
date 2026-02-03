@@ -224,6 +224,14 @@ railway environment edit -m "configure build, start, and env" --json <<< '{"serv
 
 ## Error Handling
 
+### Command Not Found
+
+If `railway environment edit` is not recognized, upgrade the CLI:
+
+```bash
+railway upgrade
+```
+
 ### Service Not Found
 
 ```
