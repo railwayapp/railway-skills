@@ -15,20 +15,33 @@ Deploy code from the current directory to Railway using `railway up`.
 - User wants to deploy local code changes
 - User says "deploy and fix any issues" (use --ci mode)
 
+## Commit Message
+
+Always use the `-m` flag with a descriptive commit message summarizing what's being deployed:
+
+```bash
+railway up --detach -m "Add user authentication endpoint"
+```
+
+Good commit messages:
+- Describe what changed: "Fix memory leak in worker process"
+- Reference tickets/issues: "Implement feature #123"
+- Be concise but meaningful: "Update deps and fix build warnings"
+
 ## Modes
 
 ### Detach Mode (default)
 Starts deploy and returns immediately. Use for most deploys.
 
 ```bash
-railway up --detach
+railway up --detach -m "Deploy description here"
 ```
 
 ### CI Mode
 Streams build logs until complete. Use when user wants to watch the build or needs to debug issues.
 
 ```bash
-railway up --ci
+railway up --ci -m "Deploy description here"
 ```
 
 **When to use CI mode:**
@@ -41,7 +54,7 @@ railway up --ci
 Default is linked service. To deploy to a different service:
 
 ```bash
-railway up --detach --service backend
+railway up --detach --service backend -m "Deploy description here"
 ```
 
 ## Deploy to Unlinked Project
@@ -49,7 +62,7 @@ railway up --detach --service backend
 Deploy to a project without linking first:
 
 ```bash
-railway up --project <project-id> --environment production --detach
+railway up --project <project-id> --environment production --detach -m "Deploy description here"
 ```
 
 Requires both `--project` and `--environment` flags.
@@ -58,6 +71,7 @@ Requires both `--project` and `--environment` flags.
 
 | Flag | Description |
 |------|-------------|
+| `-m, --message <MSG>` | Commit message describing the deploy (always use this) |
 | `-d, --detach` | Don't attach to logs (default) |
 | `-c, --ci` | Stream build logs, exit when done |
 | `-s, --service <NAME>` | Target service (defaults to linked) |
