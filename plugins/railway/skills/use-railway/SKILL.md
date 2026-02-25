@@ -7,6 +7,7 @@ description: >
   this skill whenever the user mentions Railway, deployments, services,
   environments, build failures, or infrastructure operations, even if they don't
   say "Railway" explicitly.
+allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*)
 ---
 
 # Use Railway
