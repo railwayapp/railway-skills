@@ -1,38 +1,55 @@
 # Railway Claude Plugin
 
-Claude plugin for [Railway](https://railway.com). Interact with your Railway
-projects directly from Claude Code.
+Claude plugin for [Railway](https://railway.com). Interact with Railway through one orchestration skill.
 
-## Skills
+## Skill model
 
-Skills are model-invoked - Claude decides when to use them based on user intent
-matching the skill description. Each skill lives in `plugins/railway/skills/{name}/SKILL.md`.
+This plugin ships one Railway skill:
 
-Read `plugins/railway/skills/{name}/SKILL.md` for detailed usage, examples, and error handling.
-For general info on how Claude Code skills work, look up the Claude Code skill
-documentation.
+- `plugins/railway/skills/use-railway/SKILL.md`
 
-When editing or creating skills, use the `skill-development` skill to follow best practices.
+`use-railway` is route-first. Routing rules and intent mapping live in `SKILL.md`.
+
+## Reference loading pattern
+
+1. Read `plugins/railway/skills/use-railway/SKILL.md`.
+2. Choose the minimum reference set needed for the request.
+3. For multi-step requests, load multiple references and compose one response.
+
+References:
+
+| Intent | Reference | Use for |
+|---|---|---|
+| Create or connect resources | `references/setup.md` | Projects, services, databases, templates, workspaces |
+| Ship code or manage releases | `references/deploy.md` | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
+| Change configuration | `references/configure.md` | Environments, variables, config patches, domains, networking |
+| Check health or debug failures | `references/operate.md` | Status, logs, metrics, build/runtime triage, recovery |
+| Request from API, docs, or community | `references/request.md` | GraphQL mutations, metrics queries, Central Station, official docs |
 
 ## Architecture
 
-Skills can use either the Railway CLI or GraphQL API:
+### CLI first
 
-**CLI** - The `railway` command. Best for operations that use the linked
-project/service context. Always use `--json` flag for parseable output.
+Use Railway CLI for context-aware operations.
 
-**GraphQL API** - Direct API access at
-`https://backboard.railway.com/graphql/v2`. Use for mutations or operations not
-available in CLI.
+- Command: `railway`
+- Prefer `--json` output where available.
 
-### API Token
+### GraphQL API
 
-Token location: `~/.railway/config.json` → `user.token`
+Use GraphQL for operations the CLI doesn't expose.
 
-Each skill that needs GraphQL has `scripts/railway-api.sh` for authenticated requests:
+- Endpoint: `https://backboard.railway.com/graphql/v2`
+- API helper: `plugins/railway/skills/use-railway/scripts/railway-api.sh`
+
+### API token
+
+Token location: `~/.railway/config.json` under `user.token`.
+
+Example:
 
 ```bash
-# From within a skill directory
+# From plugins/railway/skills/use-railway
 scripts/railway-api.sh \
   'query getEnv($id: String!) { environment(id: $id) { name } }' \
   '{"id": "env-uuid"}'
@@ -40,45 +57,18 @@ scripts/railway-api.sh \
 
 API docs: https://docs.railway.com/api/llms-docs.md
 
-Full schema introspection:
+## Authoring guidance
 
-```bash
-curl -s https://backboard.railway.com/graphql/v2 \
-  -H 'content-type: application/json' \
-  -d '{"query":"{ __schema { types { name fields { name args { name type { name } } type { name } } } } }"}'
-```
+When editing this plugin:
 
-## Composability
-
-Skills build on each other. Base skills (`status`, `service-status`) provide
-preflight checks that operation skills can reference before making changes.
-
-## Shared Files
-
-Scripts and references are shared across skills. Canonical versions live in
-`plugins/railway/skills/_shared/`. Each skill has its own copy for portability.
-
-**DO NOT edit files in individual skill `scripts/` or `references/` directories.**
-Edit the canonical version in `_shared/`, then run:
-
-```bash
-./scripts/sync-shared.sh
-```
-
-Shared files:
-- `_shared/scripts/railway-api.sh` - GraphQL API helper
-- `_shared/scripts/railway-common.sh` - CLI preflight checks
-- `_shared/references/*.md` - Config schemas, variable patterns, etc.
-
-## Adding New Skills
-
-1. Create `plugins/railway/skills/{name}/SKILL.md` with YAML frontmatter (`name`, `description`)
-2. Choose CLI or API based on what's available/appropriate
-3. Reference base skills for preflight checks if needed
+- Keep `SKILL.md` focused on routing, preflight, composition, and common operations.
+- Keep references organized by information type (setup, deploy, configure, operate, api).
+- Keep references action-oriented with reasoning. Explain why, not only what.
+- Keep CLI behavior claims aligned with Railway docs and CLI source.
+- Keep a single "Validated against" block at the end of each reference.
 
 ## References
 
-Look at these when developing new skills:
-
 - https://code.claude.com/docs/en/skills
 - https://code.claude.com/docs/en/plugins
+- https://agentskills.io/specification

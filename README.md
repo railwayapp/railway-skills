@@ -1,6 +1,6 @@
 # Railway Skills
 
-Agent skills for [Railway](https://railway.com), following the [Agent Skills](https://agentskills.io) open format.
+Agent skill for [Railway](https://railway.com), following the [Agent Skills](https://agentskills.io) format.
 
 ## Installation
 
@@ -8,118 +8,68 @@ Agent skills for [Railway](https://railway.com), following the [Agent Skills](ht
 curl -fsSL railway.com/skills.sh | bash
 ```
 
-You can also install via [skills.sh](https://skills.sh)
+You can also install via [skills.sh](https://skills.sh):
 
 ```bash
-npx skills add railwayapp/railway-skills 
+npx skills add railwayapp/railway-skills
 ```
 
-This will allow you to pick and choose which skills to install.
+Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Run the installer again to update.
 
-Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Re-run to update.
+## Skill surface
 
-### Manual Installation
+This repo ships one installable skill:
 
-<details>
-<summary>Claude Code (plugin)</summary>
+- [`use-railway`](plugins/railway/skills/use-railway/SKILL.md)
 
-```bash
-claude plugin marketplace add railwayapp/railway-skills
-claude plugin install railway@railway-skills
-```
+`use-railway` is route-first. Intent routing is defined in `SKILL.md`, and execution details are split into action-oriented references.
 
-Update with:
-```bash
-claude plugin marketplace update
-claude plugin update railway@railway-skills
-```
-</details>
+## Workflow coverage
 
-<details>
-<summary>Local skills copy (any agent)</summary>
+`use-railway` covers:
 
-Copy `plugins/railway/skills/` to your agent's skills directory:
-- Claude: `~/.claude/skills/`
-- Codex: `~/.codex/skills/`
-- OpenCode: `~/.config/opencode/skill/`
-- Cursor: `~/.cursor/skills/`
-</details>
+- Project and service setup
+- Deploy and release operations
+- Troubleshooting and recovery
+- Environment config and variables
+- Networking and domains
+- Status and observability
+- Projects and workspaces
+- Docs and community research
 
-## Available Skills
+## Repository structure
 
-| Skill | Description |
-|-------|-------------|
-| [status](plugins/railway/skills/status/SKILL.md) | Check Railway project status |
-| [projects](plugins/railway/skills/projects/SKILL.md) | List, switch, and configure projects |
-| [new](plugins/railway/skills/new/SKILL.md) | Create projects, services, databases |
-| [service](plugins/railway/skills/service/SKILL.md) | Manage existing services |
-| [deploy](plugins/railway/skills/deploy/SKILL.md) | Deploy local code |
-| [domain](plugins/railway/skills/domain/SKILL.md) | Manage service domains |
-| [environment](plugins/railway/skills/environment/SKILL.md) | Manage config (vars, commands, replicas) |
-| [deployment](plugins/railway/skills/deployment/SKILL.md) | Manage deployments (list, logs, redeploy, remove) |
-| [database](plugins/railway/skills/database/SKILL.md) | Add Railway databases |
-| [templates](plugins/railway/skills/templates/SKILL.md) | Deploy from marketplace |
-| [metrics](plugins/railway/skills/metrics/SKILL.md) | Query resource usage |
-| [railway-docs](plugins/railway/skills/railway-docs/SKILL.md) | Fetch up-to-date Railway documentation |
-
-## Hooks
-
-This plugin includes a PreToolUse hook that auto-approves `railway-api.sh` calls to avoid permission prompts on every GraphQL API request.
-
-## Repository Structure
-
-```
+```text
 railway-skills/
 ├── plugins/railway/
 │   ├── .claude-plugin/
 │   │   └── plugin.json
 │   ├── hooks/
 │   └── skills/
-│       ├── _shared/           # Canonical shared files
-│       │   ├── scripts/
-│       │   └── references/
-│       └── {skill-name}/
+│       └── use-railway/
 │           ├── SKILL.md
-│           ├── scripts/       # Copied from _shared
-│           └── references/    # Copied from _shared
+│           ├── scripts/
+│           │   └── railway-api.sh
+│           └── references/
+│               ├── setup.md
+│               ├── deploy.md
+│               ├── configure.md
+│               ├── operate.md
+│               └── request.md
 ├── scripts/
-│   ├── install.sh             # Universal installer
-│   └── sync-shared.sh         # Sync shared files
-└── README.md
+│   └── install.sh
+├── AGENTS.md
+├── CLAUDE.md -> AGENTS.md
+└── rfc.md
 ```
 
-## Creating New Skills
+## Development notes
 
-Create `plugins/railway/skills/{name}/SKILL.md`:
-
-```yaml
----
-name: my-skill
-description: What this skill does and when to use it
----
-
-# Instructions
-
-Step-by-step guidance for the agent.
-
-## Examples
-
-Concrete examples showing expected input/output.
-```
-
-## Development
-
-### Shared Files
-
-Scripts (`railway-api.sh`) and references (`variables.md`, etc.) are shared across skills.
-Canonical versions live in `plugins/railway/skills/_shared/`.
-
-After editing files in `_shared/`, run:
-```bash
-./scripts/sync-shared.sh
-```
-
-This copies shared files to each skill. Do not edit copies in individual skills directly.
+- Keep `SKILL.md` concise and routing-focused.
+- Keep workflow behavior in action-oriented references.
+- Keep deep schema and reference material separate from runbooks.
+- Prefer canonical CLI syntax in examples.
+- Keep API requests in `scripts/railway-api.sh` for consistent auth handling.
 
 ## References
 
