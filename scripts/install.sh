@@ -40,24 +40,29 @@ EOF
   printf "${NC}"
 }
 
-install_skills() {
+install_skill() {
   local skills_dir="$1"
   local name="$2"
   local temp_dir="$3"
+  local source_dir="$temp_dir/plugins/railway/skills/use-railway"
+  local target_dir="$skills_dir/use-railway"
 
   mkdir -p "$skills_dir"
-  rm -rf "$skills_dir"/railway-* 2>/dev/null || true
 
-  local count=0
-  for d in "$temp_dir"/plugins/railway/skills/*/; do
-    skill_name=$(basename "$d")
-    [[ "$skill_name" == _* ]] && continue
-    [ -f "$d/SKILL.md" ] || continue
-    cp -R "$d" "$skills_dir/railway-$skill_name"
-    count=$((count + 1))
+  # Remove legacy skills from previous multi-skill installs
+  for old_skill in "$skills_dir"/railway-*/; do
+    [ -d "$old_skill" ] && rm -rf "$old_skill"
   done
 
-  completed "$name: ${GREEN}$count${NC} skills → ${CYAN}$skills_dir${NC}"
+  if [ ! -f "$source_dir/SKILL.md" ]; then
+    error "use-railway skill not found in downloaded repository."
+    return 1
+  fi
+
+  rm -rf "$target_dir"
+  cp -R "$source_dir" "$target_dir"
+
+  completed "$name: installed ${GREEN}use-railway${NC} → ${CYAN}$target_dir${NC}"
 }
 
 # Targets: [dir, name]
@@ -96,7 +101,7 @@ printf "\n"
 for target in "${FOUND[@]}"; do
   dir="${target%%|*}"
   name="${target##*|}"
-  install_skills "$dir" "$name" "$temp_dir"
+  install_skill "$dir" "$name" "$temp_dir"
 done
 
 # Local installs (skip if CWD is $HOME)
@@ -111,7 +116,7 @@ if [ "$(pwd)" != "$HOME" ]; then
     dir="${target%%|*}"
     name="${target##*|}"
     parent="${dir%/*}"
-    [ -d "./$parent" ] && install_skills "./$dir" "$name" "$temp_dir"
+    [ -d "./$parent" ] && install_skill "./$dir" "$name" "$temp_dir"
   done
 fi
 
