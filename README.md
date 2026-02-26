@@ -35,7 +35,7 @@ This repo ships one installable skill:
 - Networking and domains
 - Status and observability
 - Projects and workspaces
-- Docs and community research
+- Docs and community search
 
 ## Repository structure
 
