@@ -2,11 +2,11 @@
 name: use-railway
 description: >
   Operate Railway infrastructure: create projects, provision services and
-  databases, deploy code, configure environments and variables, manage domains,
-  troubleshoot failures, check status and metrics, and query Railway docs. Use
-  this skill whenever the user mentions Railway, deployments, services,
-  environments, build failures, or infrastructure operations, even if they don't
-  say "Railway" explicitly.
+  databases, manage object storage buckets, deploy code, configure environments
+  and variables, manage domains, troubleshoot failures, check status and metrics,
+  and query Railway docs. Use this skill whenever the user mentions Railway,
+  deployments, services, environments, buckets, object storage, build failures,
+  or infrastructure operations, even if they don't say "Railway" explicitly.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*)
 ---
 
@@ -20,6 +20,7 @@ Railway organizes infrastructure in a hierarchy:
 - **Project** is a collection of services under one workspace. It maps to one deployable unit of work.
 - **Environment** is an isolated configuration plane inside a project (for example, `production`, `staging`). Each environment has its own variables, config, and deployment history.
 - **Service** is a single deployable unit inside a project. It can be an app from a repo, a Docker image, or a managed database.
+- **Bucket** is an S3-compatible object storage resource inside a project. Buckets are created at the project level and deployed to environments. Each bucket has credentials (endpoint, access key, secret key) for S3-compatible access.
 - **Deployment** is a point-in-time release of a service in an environment. It has build logs, runtime logs, and a status lifecycle.
 
 Most CLI commands operate on the linked project/environment/service context. Use `railway status --json` to see the context, and `--project`, `--environment`, `--service` flags to override.
@@ -64,6 +65,9 @@ railway variable list --service <svc> --json             # list variables
 railway variable set KEY=value --service <svc>           # set a variable
 railway logs --service <svc> --lines 200 --json          # recent logs
 railway up --detach -m "<summary>"                       # deploy current directory
+railway bucket list --json                               # list buckets in current environment
+railway bucket info --bucket <name> --json               # bucket storage and object count
+railway bucket credentials --bucket <name> --json        # S3-compatible credentials
 ```
 
 ## Routing
@@ -72,7 +76,7 @@ For anything beyond quick operations, load the reference that matches the user's
 
 | Intent | Reference | Use for |
 |---|---|---|
-| Create or connect resources | [setup.md](references/setup.md) | Projects, services, databases, templates, workspaces |
+| Create or connect resources | [setup.md](references/setup.md) | Projects, services, databases, buckets, templates, workspaces |
 | Ship code or manage releases | [deploy.md](references/deploy.md) | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
 | Change configuration | [configure.md](references/configure.md) | Environments, variables, config patches, domains, networking |
 | Check health or debug failures | [operate.md](references/operate.md) | Status, logs, metrics, build/runtime triage, recovery |
@@ -92,6 +96,7 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 
 Multi-step workflows follow natural chains:
 
+- **Add object storage**: setup (create bucket), setup (get credentials), configure (set S3 variables on app service)
 - **First deploy**: setup (create project + service), configure (set variables and source), deploy, operate (verify healthy)
 - **Fix a failure**: operate (triage logs), configure (fix config/variables), deploy (redeploy), operate (verify recovery)
 - **Add a domain**: configure (add domain + set port), operate (verify DNS and service health)

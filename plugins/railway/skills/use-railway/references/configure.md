@@ -177,6 +177,8 @@ Natural language mapping: "add replicas in Europe" → `europe-west4-drams3a`, "
 
 **Storage**: `volumeMounts.<volume-id>.mountPath` (string), `volumes.<volume-id>.isDeleted` (boolean)
 
+**Buckets**: `buckets.<bucket-id>.region` (string: `sjc`, `iad`, `ams`, `sin`), `buckets.<bucket-id>.isCreated` (boolean), `buckets.<bucket-id>.isDeleted` (boolean). Buckets are created at the project level via `railway bucket create` and deployed to environments via config patches. The CLI handles this automatically — use `railway bucket` commands
+
 ### Shared variables and project-level config
 
 ```bash
