@@ -20,7 +20,7 @@ References:
 
 | Intent | Reference | Use for |
 |---|---|---|
-| Create or connect resources | `references/setup.md` | Projects, services, databases, templates, workspaces |
+| Create or connect resources | `references/setup.md` | Projects, services, databases, buckets, templates, workspaces |
 | Ship code or manage releases | `references/deploy.md` | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
 | Change configuration | `references/configure.md` | Environments, variables, config patches, domains, networking |
 | Check health or debug failures | `references/operate.md` | Status, logs, metrics, build/runtime triage, recovery |

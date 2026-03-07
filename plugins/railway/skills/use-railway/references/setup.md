@@ -131,6 +131,99 @@ railway environment edit --service-config <service> source.image <image:tag>
 
 This sets the service to pull from a container registry instead of building from source.
 
+## Buckets
+
+Buckets are S3-compatible object storage. They are created at the project level and deployed to environments via config patches.
+
+### List buckets
+
+```bash
+railway bucket list --json                                # buckets in current environment
+railway bucket list --environment production --json       # buckets in a specific environment
+```
+
+### Create a bucket
+
+```bash
+railway bucket create my-bucket --region sjc              # create with name and region
+railway bucket create --region iad --json                 # auto-named, JSON output
+```
+
+Available regions:
+
+| Code | Location |
+|---|---|
+| `sjc` | US West (California) |
+| `iad` | US East (Virginia) |
+| `ams` | EU West (Amsterdam) |
+| `sin` | Asia Pacific (Singapore) |
+
+Without `--region`, the CLI prompts interactively. For scripted use, always pass `--region`.
+
+### Delete a bucket
+
+Deletion is permanent and destroys all objects in the bucket.
+
+```bash
+railway bucket delete --bucket my-bucket --yes            # non-interactive
+railway bucket delete --bucket my-bucket --yes --2fa-code 123456   # with 2FA
+```
+
+### Rename a bucket
+
+```bash
+railway bucket rename --bucket my-bucket --name new-name --json
+```
+
+### Bucket info
+
+Check storage usage and object count:
+
+```bash
+railway bucket info --bucket my-bucket --json
+```
+
+Returns storage size (bytes), object count, region, and environment.
+
+### Bucket credentials
+
+Get S3-compatible credentials for connecting your app to a bucket:
+
+```bash
+railway bucket credentials --bucket my-bucket --json
+```
+
+Returns: `endpoint`, `accessKeyId`, `secretAccessKey`, `bucketName`, `region`, `urlStyle`.
+
+Without `--json`, output uses `AWS_*=value` lines suitable for `eval $(railway bucket credentials)` or piping into `.env` files.
+
+To reset credentials (invalidates existing ones):
+
+```bash
+railway bucket credentials --bucket my-bucket --reset --yes
+railway bucket credentials --bucket my-bucket --reset --yes --2fa-code 123456  # with 2FA
+```
+
+### Connect a bucket to a service
+
+After creating a bucket, wire the S3 credentials to your app service as environment variables:
+
+```bash
+# Get credentials
+railway bucket credentials --bucket my-bucket --json
+
+# Set them on your app service
+railway variable set \
+  AWS_ENDPOINT_URL=<endpoint> \
+  AWS_ACCESS_KEY_ID=<access-key> \
+  AWS_SECRET_ACCESS_KEY=<secret-key> \
+  AWS_S3_BUCKET_NAME=<bucket-name> \
+  AWS_DEFAULT_REGION=<region> \
+  --service <app-service>
+```
+
+All subcommands support `--bucket (-b)` and `--environment (-e)` as global flags to skip interactive prompts.
+
 ## Analyze codebase before setup
 
 When setting up a new service from source, detect the project type from marker files:
@@ -192,4 +285,4 @@ When creating projects, Railway uses the default workspace unless `--workspace` 
 ## Validated against
 
 - Docs: [cli.md](https://docs.railway.com/cli), [init.md](https://docs.railway.com/cli/init), [add.md](https://docs.railway.com/cli/add), [link.md](https://docs.railway.com/cli/link), [project.md](https://docs.railway.com/cli/project), [list.md](https://docs.railway.com/cli/list), [whoami.md](https://docs.railway.com/cli/whoami)
-- CLI source: [init.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/init.rs), [add.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/add.rs), [project.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/project.rs), [list.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/list.rs)
+- CLI source: [init.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/init.rs), [add.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/add.rs), [project.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/project.rs), [list.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/list.rs), [bucket.rs](https://github.com/railwayapp/cli/blob/feat/bucket-command/src/commands/bucket.rs)

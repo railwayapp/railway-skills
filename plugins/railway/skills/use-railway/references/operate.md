@@ -14,6 +14,13 @@ railway deployment list --limit 10 --json                # recent deployments
 
 Deployment statuses: `SUCCESS`, `BUILDING`, `DEPLOYING`, `FAILED`, `CRASHED`, `REMOVED`.
 
+For projects with buckets, include bucket status:
+
+```bash
+railway bucket list --json                                       # buckets in current environment
+railway bucket info --bucket <name> --json                       # storage size, object count, region
+```
+
 If everything looks healthy, return a summary and stop. If something is degraded or failing, continue to log inspection.
 
 ## Logs
