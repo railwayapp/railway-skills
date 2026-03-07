@@ -78,6 +78,10 @@ Available measurements: `CPU_USAGE`, `CPU_LIMIT`, `MEMORY_USAGE_GB`, `MEMORY_LIM
 
 Omit `serviceId` and add `"groupBy": ["SERVICE_ID"]` to query all services in the environment at once. Get the environment and service IDs from `railway status --json`.
 
+## Database inspection
+
+For database-level metrics and introspection (connection counts, replication status, slow queries, table sizes), SSH into the service and query the database directly. See [ssh.md](ssh.md).
+
 ## Failure triage
 
 When something is broken, classify the failure first. The fix depends on the class.

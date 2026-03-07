@@ -80,6 +80,7 @@ For anything beyond quick operations, load the reference that matches the user's
 | Ship code or manage releases | [deploy.md](references/deploy.md) | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
 | Change configuration | [configure.md](references/configure.md) | Environments, variables, config patches, domains, networking |
 | Check health or debug failures | [operate.md](references/operate.md) | Status, logs, metrics, build/runtime triage, recovery |
+| SSH into services or query databases | [ssh.md](references/ssh.md) | SSH access, database introspection, Patroni cluster status |
 | Request from API, docs, or community | [request.md](references/request.md) | Railway GraphQL API queries/mutations, metrics queries, Central Station, official docs |
 
 If the request spans two areas (for example, "deploy and then check if it's healthy"), load both references and compose one response.
