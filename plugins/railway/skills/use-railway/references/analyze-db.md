@@ -159,7 +159,6 @@ The script handles:
 Common extensions:
 - `pg_stat_statements` - Query performance tracking
 - `postgis` - Geographic objects
-- `pgvector` - Vector similarity search
 - `pg_trgm` - Trigram text search
 - `uuid-ossp` - UUID generation
 - `hstore` - Key-value storage
