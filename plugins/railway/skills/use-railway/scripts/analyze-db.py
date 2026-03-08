@@ -1,0 +1,2317 @@
+#!/usr/bin/env python3
+"""
+Complete database analysis for Railway deployments.
+
+Produces a comprehensive report covering:
+- Deployment status
+- Resource overview (disk, connections)
+- Memory configuration
+- Cache efficiency (overall and per-table)
+- Vacuum health
+- Query performance (with --deep)
+- Index health
+- Recommendations
+
+Usage:
+    analyze-db.py --service <name> --type postgres
+    analyze-db.py --service <name> --type postgres --deep
+    analyze-db.py --service <name> --type postgres --json
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+import re
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass, field, asdict
+
+
+@dataclass
+class AnalysisResult:
+    """Container for analysis results."""
+    service: str
+    db_type: str
+    timestamp: str
+    deployment_status: str = "UNKNOWN"
+    disk_usage: Optional[Dict[str, Any]] = None
+    cpu_memory: Optional[Dict[str, Any]] = None
+    connections: Optional[Dict[str, Any]] = None
+    connection_states: List[Dict[str, Any]] = field(default_factory=list)
+    connections_by_app: List[Dict[str, Any]] = field(default_factory=list)
+    connections_by_age: List[Dict[str, Any]] = field(default_factory=list)
+    oldest_connection_sec: Optional[int] = None
+    memory_config: Optional[Dict[str, Any]] = None
+    cache_hit: Optional[Dict[str, Any]] = None
+    cache_per_table: List[Dict[str, Any]] = field(default_factory=list)
+    table_sizes: List[Dict[str, Any]] = field(default_factory=list)
+    database_stats: Optional[Dict[str, Any]] = None
+    size_breakdown: Optional[Dict[str, Any]] = None
+    vacuum_health: List[Dict[str, Any]] = field(default_factory=list)
+    xid_age: Optional[Dict[str, Any]] = None
+    pg_stat_statements_installed: bool = False
+    top_queries: List[Dict[str, Any]] = field(default_factory=list)
+    long_running_queries: List[Dict[str, Any]] = field(default_factory=list)
+    idle_in_transaction: List[Dict[str, Any]] = field(default_factory=list)
+    blocked_queries: List[Dict[str, Any]] = field(default_factory=list)
+    locks: List[Dict[str, Any]] = field(default_factory=list)
+    unused_indexes: List[Dict[str, Any]] = field(default_factory=list)
+    invalid_indexes: List[Dict[str, Any]] = field(default_factory=list)
+    seq_scan_tables: List[Dict[str, Any]] = field(default_factory=list)
+    replication: List[Dict[str, Any]] = field(default_factory=list)
+    bgwriter: Optional[Dict[str, Any]] = None
+    archiver: Optional[Dict[str, Any]] = None
+    progress_vacuum: List[Dict[str, Any]] = field(default_factory=list)
+    ssl_stats: Optional[Dict[str, Any]] = None
+    ha_cluster: Optional[Dict[str, Any]] = None
+    cluster_logs: List[Dict[str, Any]] = field(default_factory=list)
+    recent_errors: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+    recommendations: List[Dict[str, str]] = field(default_factory=list)
+
+
+def run_railway_command(args: List[str], timeout: int = 30) -> Tuple[int, str, str]:
+    """Run a railway CLI command and return (returncode, stdout, stderr)."""
+    try:
+        result = subprocess.run(
+            ["railway"] + args,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        return 124, "", "Command timed out"
+    except FileNotFoundError:
+        return 127, "", "railway CLI not found"
+
+
+def run_ssh_query(service: str, command: str, timeout: int = 60) -> Tuple[int, str, str]:
+    """Run a command via railway ssh."""
+    escaped_command = command.replace("'", "'\"'\"'")
+    args = ["ssh", "--service", service, "--", f"sh -c '{escaped_command}'"]
+    return run_railway_command(args, timeout)
+
+
+def run_ssh_with_stdin(service: str, command: str, stdin_data: str, timeout: int = 60) -> Tuple[int, str, str]:
+    """Run a command via railway ssh with stdin data (avoids shell quoting issues)."""
+    try:
+        result = subprocess.run(
+            ["railway", "ssh", "--service", service, "--", command],
+            input=stdin_data,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        return 124, "", "Command timed out"
+    except FileNotFoundError:
+        return 127, "", "railway CLI not found"
+
+
+def run_psql_query(service: str, query: str, timeout: int = 60) -> Tuple[int, str]:
+    """Run a psql query and return (returncode, output)."""
+    # Normalize query whitespace
+    query = " ".join(query.split())
+    command = f'''PAGER='' psql $DATABASE_URL -P pager=off -t -A -c "{query}"'''
+    code, stdout, stderr = run_ssh_query(service, command, timeout)
+    if code != 0:
+        return code, stderr or stdout
+    return 0, stdout
+
+
+def run_psql_query_safe(service: str, query: str, timeout: int = 60) -> Tuple[int, str, str]:
+    """Run a psql query using stdin to avoid shell quoting issues."""
+    code, stdout, stderr = run_ssh_with_stdin(
+        service,
+        "psql $DATABASE_URL -P pager=off -t -A",
+        query,
+        timeout
+    )
+    return code, stdout, stderr
+
+
+def build_analysis_query() -> str:
+    """Build a single SQL query that returns all analysis data as JSON."""
+    return """
+SELECT json_build_object(
+    'connections', (
+        SELECT json_build_object(
+            'current', (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()),
+            'max', (SELECT setting::int FROM pg_settings WHERE name = 'max_connections'),
+            'reserved', (SELECT setting::int FROM pg_settings WHERE name = 'superuser_reserved_connections'),
+            'active', (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND state = 'active'),
+            'idle', (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle'),
+            'idle_in_transaction', (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle in transaction')
+        )
+    ),
+    'memory_config', (
+        SELECT json_agg(json_build_object(
+            'name', name,
+            'setting', setting,
+            'unit', unit
+        ))
+        FROM pg_settings
+        WHERE name IN (
+            'shared_buffers', 'effective_cache_size', 'work_mem', 'maintenance_work_mem',
+            'wal_buffers', 'checkpoint_completion_target', 'min_wal_size', 'max_wal_size',
+            'max_parallel_workers', 'max_parallel_workers_per_gather', 'random_page_cost',
+            'default_statistics_target', 'synchronous_commit', 'max_connections',
+            'autovacuum', 'autovacuum_vacuum_scale_factor', 'autovacuum_analyze_scale_factor'
+        )
+    ),
+    'cache_hit', (
+        SELECT json_build_object(
+            'table_hit_pct', ROUND(100.0 * sum(heap_blks_hit) / NULLIF(sum(heap_blks_hit) + sum(heap_blks_read), 0), 2),
+            'index_hit_pct', ROUND(100.0 * sum(idx_blks_hit) / NULLIF(sum(idx_blks_hit) + sum(idx_blks_read), 0), 2)
+        )
+        FROM pg_statio_user_tables
+    ),
+    'database_stats', (
+        SELECT json_build_object(
+            'deadlocks', deadlocks,
+            'temp_files', temp_files,
+            'temp_bytes', temp_bytes,
+            'stats_reset', COALESCE(stats_reset::text, 'never'),
+            'blks_read', blks_read,
+            'blks_hit', blks_hit,
+            'tup_returned', tup_returned,
+            'tup_fetched', tup_fetched,
+            'tup_inserted', tup_inserted,
+            'tup_updated', tup_updated,
+            'tup_deleted', tup_deleted,
+            'conflicts', conflicts,
+            'checksum_failures', COALESCE(checksum_failures, 0)
+        )
+        FROM pg_stat_database
+        WHERE datname = current_database()
+    ),
+    'cache_per_table', (
+        SELECT COALESCE(json_agg(t ORDER BY t.disk_reads DESC), '[]'::json)
+        FROM (
+            SELECT
+                relname as table_name,
+                heap_blks_read as disk_reads,
+                heap_blks_hit as cache_hits,
+                ROUND(100.0 * heap_blks_hit / NULLIF(heap_blks_hit + heap_blks_read, 0), 2) as hit_pct
+            FROM pg_statio_user_tables
+            WHERE heap_blks_read > 10000
+            ORDER BY heap_blks_read DESC LIMIT 1000
+        ) t
+    ),
+    'table_sizes', (
+        SELECT COALESCE(json_agg(t ORDER BY t.total_bytes DESC), '[]'::json)
+        FROM (
+            SELECT
+                schemaname as schema,
+                relname as table_name,
+                pg_size_pretty(pg_total_relation_size(relid)) as size,
+                pg_total_relation_size(relid) as total_bytes,
+                pg_table_size(relid) as data_bytes,
+                pg_indexes_size(relid) as index_bytes,
+                n_live_tup as row_count
+            FROM pg_stat_user_tables
+            ORDER BY pg_total_relation_size(relid) DESC LIMIT 1000
+        ) t
+    ),
+    'size_breakdown', (
+        SELECT json_build_object(
+            'database_bytes', pg_database_size(current_database()),
+            'wal_bytes', COALESCE((SELECT sum(size) FROM pg_ls_waldir()), 0),
+            'user_tables_bytes', COALESCE((SELECT sum(pg_table_size(relid)) FROM pg_stat_user_tables), 0),
+            'user_indexes_bytes', COALESCE((SELECT sum(pg_indexes_size(relid)) FROM pg_stat_user_tables), 0),
+            'system_bytes', COALESCE((
+                SELECT sum(pg_total_relation_size(c.oid))
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname IN ('pg_catalog', 'information_schema') AND NOT c.relisshared
+            ), 0)
+        )
+    ),
+    'vacuum_health', (
+        SELECT COALESCE(json_agg(t ORDER BY t.dead_rows DESC), '[]'::json)
+        FROM (
+            SELECT
+                s.schemaname as schema,
+                s.relname as table_name,
+                n_live_tup as live_rows,
+                n_dead_tup as dead_rows,
+                CASE WHEN n_live_tup > 0 THEN ROUND(100.0 * n_dead_tup / n_live_tup, 2) ELSE 0 END as dead_pct,
+                vacuum_count,
+                autovacuum_count,
+                COALESCE(last_vacuum::text, 'never') as last_vacuum,
+                COALESCE(last_autovacuum::text, 'never') as last_autovacuum,
+                COALESCE(last_analyze::text, 'never') as last_analyze,
+                age(c.relfrozenxid) as xid_age,
+                CASE WHEN n_dead_tup > 1000 AND (n_live_tup = 0 OR n_dead_tup::float / NULLIF(n_live_tup, 0) > 0.1) THEN true ELSE false END as needs_vacuum,
+                CASE WHEN age(c.relfrozenxid) > 150000000 THEN true ELSE false END as needs_freeze
+            FROM pg_stat_user_tables s
+            JOIN pg_class c ON c.oid = s.relid
+            WHERE n_dead_tup > 100
+            ORDER BY n_dead_tup DESC LIMIT 1000
+        ) t
+    ),
+    'xid_age', (
+        SELECT json_build_object(
+            'value', age(datfrozenxid)
+        )
+        FROM pg_database WHERE datname = current_database()
+    ),
+    'unused_indexes', (
+        SELECT COALESCE(json_agg(t ORDER BY t.size_bytes DESC), '[]'::json)
+        FROM (
+            SELECT
+                s.schemaname as schema,
+                s.relname as table_name,
+                s.indexrelname as index_name,
+                pg_size_pretty(pg_relation_size(s.indexrelid)) as size,
+                pg_relation_size(s.indexrelid) as size_bytes,
+                s.idx_scan as scans,
+                t.seq_scan as table_seq_scans,
+                t.idx_scan as table_idx_scans,
+                t.n_live_tup as table_rows,
+                i.indisprimary as is_primary,
+                i.indisunique as is_unique,
+                CASE WHEN t.seq_scan > 0 AND s.idx_scan = 0 AND t.n_live_tup > 1000
+                    THEN t.seq_scan ELSE 0 END as missing_index_score
+            FROM pg_stat_user_indexes s
+            JOIN pg_stat_user_tables t ON s.relid = t.relid
+            JOIN pg_index i ON s.indexrelid = i.indexrelid
+            WHERE s.idx_scan = 0 AND pg_relation_size(s.indexrelid) > 8192
+            ORDER BY pg_relation_size(s.indexrelid) DESC LIMIT 1000
+        ) t
+    ),
+    'connection_states', (
+        SELECT COALESCE(json_agg(t ORDER BY t.count DESC), '[]'::json)
+        FROM (
+            SELECT state, count(*) as count
+            FROM pg_stat_activity
+            WHERE datname = current_database()
+            GROUP BY state
+            ORDER BY count DESC
+        ) t
+    ),
+    'connections_by_app', (
+        SELECT COALESCE(json_agg(t ORDER BY t.count DESC), '[]'::json)
+        FROM (
+            SELECT COALESCE(application_name, '') as app, COUNT(*) as count
+            FROM pg_stat_activity
+            WHERE datname = current_database()
+            GROUP BY application_name
+            ORDER BY count DESC LIMIT 100
+        ) t
+    ),
+    'connections_by_age', (
+        SELECT COALESCE(json_agg(t), '[]'::json)
+        FROM (
+            SELECT
+                CASE
+                    WHEN age_seconds < 60 THEN '< 1 min'
+                    WHEN age_seconds < 300 THEN '1-5 min'
+                    WHEN age_seconds < 3600 THEN '5-60 min'
+                    WHEN age_seconds < 86400 THEN '1-24 hr'
+                    ELSE '> 24 hr'
+                END as range,
+                count(*) as count
+            FROM (
+                SELECT EXTRACT(EPOCH FROM (now() - backend_start)) as age_seconds
+                FROM pg_stat_activity WHERE datname = current_database()
+            ) sub
+            GROUP BY 1
+            ORDER BY MIN(age_seconds)
+        ) t
+    ),
+    'oldest_connection_sec', (
+        SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (now() - backend_start)))::int, 0)
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+    ),
+    'seq_scan_tables', (
+        SELECT COALESCE(json_agg(t ORDER BY t.seq_scans DESC), '[]'::json)
+        FROM (
+            SELECT
+                relname as table_name,
+                seq_scan as seq_scans,
+                idx_scan as idx_scans,
+                n_live_tup as rows
+            FROM pg_stat_user_tables
+            WHERE seq_scan > 100 AND n_live_tup > 1000
+            ORDER BY seq_scan DESC LIMIT 100
+        ) t
+    ),
+    'pg_stat_statements_installed', (
+        SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements')
+    ),
+    'top_queries', (
+        SELECT COALESCE(json_agg(t ORDER BY t.total_exec_time DESC), '[]'::json)
+        FROM (
+            SELECT
+                query,
+                calls,
+                ROUND(total_exec_time::numeric/1000/60, 1) as total_min,
+                ROUND(mean_exec_time::numeric, 1) as mean_ms,
+                ROUND(max_exec_time::numeric, 1) as max_ms,
+                rows,
+                total_exec_time,
+                shared_blks_hit,
+                shared_blks_read,
+                ROUND(100.0 * shared_blks_hit / NULLIF(shared_blks_hit + shared_blks_read, 0), 2) as cache_hit_pct,
+                temp_blks_read,
+                temp_blks_written
+            FROM pg_stat_statements s
+            JOIN pg_database d ON s.dbid = d.oid
+            WHERE d.datname = current_database()
+            ORDER BY total_exec_time DESC LIMIT 100
+        ) t
+    ),
+    'long_running_queries', (
+        SELECT COALESCE(json_agg(t ORDER BY t.duration_sec DESC), '[]'::json)
+        FROM (
+            SELECT
+                pid,
+                EXTRACT(EPOCH FROM (now() - query_start))::int as duration_sec,
+                query
+            FROM pg_stat_activity
+            WHERE state = 'active'
+                AND now() - query_start > interval '5 seconds'
+            ORDER BY query_start LIMIT 100
+        ) t
+    ),
+    'idle_in_transaction', (
+        SELECT COALESCE(json_agg(t ORDER BY t.idle_sec DESC), '[]'::json)
+        FROM (
+            SELECT
+                pid,
+                EXTRACT(EPOCH FROM (now() - state_change))::int as idle_sec,
+                COALESCE(usename, '') as username,
+                COALESCE(application_name, '') as app,
+                query as last_query
+            FROM pg_stat_activity
+            WHERE state = 'idle in transaction'
+                AND now() - state_change > interval '30 seconds'
+            ORDER BY state_change LIMIT 100
+        ) t
+    ),
+    'blocked_queries', (
+        SELECT COALESCE(json_agg(t ORDER BY t.wait_sec DESC), '[]'::json)
+        FROM (
+            SELECT
+                blocked.pid,
+                EXTRACT(EPOCH FROM (now() - blocked.query_start))::int as wait_sec,
+                COALESCE(blocked.usename, '') as username,
+                COALESCE(blocking.pid::text, '') as blocking_pid,
+                left(blocked.query, 60) as query
+            FROM pg_stat_activity blocked
+            JOIN pg_locks blocked_locks ON blocked.pid = blocked_locks.pid
+            JOIN pg_locks blocking_locks ON blocked_locks.locktype = blocking_locks.locktype
+                AND blocked_locks.database IS NOT DISTINCT FROM blocking_locks.database
+                AND blocked_locks.relation IS NOT DISTINCT FROM blocking_locks.relation
+                AND blocked_locks.page IS NOT DISTINCT FROM blocking_locks.page
+                AND blocked_locks.tuple IS NOT DISTINCT FROM blocking_locks.tuple
+                AND blocked_locks.virtualxid IS NOT DISTINCT FROM blocking_locks.virtualxid
+                AND blocked_locks.transactionid IS NOT DISTINCT FROM blocking_locks.transactionid
+                AND blocked_locks.classid IS NOT DISTINCT FROM blocking_locks.classid
+                AND blocked_locks.objid IS NOT DISTINCT FROM blocking_locks.objid
+                AND blocked_locks.objsubid IS NOT DISTINCT FROM blocking_locks.objsubid
+                AND blocked_locks.pid != blocking_locks.pid
+            JOIN pg_stat_activity blocking ON blocking_locks.pid = blocking.pid
+            WHERE NOT blocked_locks.granted
+            ORDER BY blocked.query_start LIMIT 100
+        ) t
+    ),
+    'locks', (
+        SELECT COALESCE(json_agg(t), '[]'::json)
+        FROM (
+            SELECT
+                l.locktype,
+                l.mode,
+                COALESCE(a.usename, '') as username,
+                COALESCE(a.application_name, '') as app,
+                left(COALESCE(a.query, ''), 50) as query
+            FROM pg_locks l
+            JOIN pg_stat_activity a ON l.pid = a.pid
+            WHERE a.datname = current_database() AND NOT l.granted
+            LIMIT 100
+        ) t
+    ),
+    'replication', (
+        SELECT COALESCE(json_agg(t), '[]'::json)
+        FROM (
+            SELECT
+                COALESCE(client_addr::text, 'local') as client,
+                state,
+                sent_lsn::text as sent_lsn,
+                replay_lsn::text as replay_lsn
+            FROM pg_stat_replication
+        ) t
+    ),
+    'bgwriter', (
+        SELECT json_build_object(
+            'checkpoints_timed', checkpoints_timed,
+            'checkpoints_req', checkpoints_req,
+            'buffers_checkpoint', buffers_checkpoint,
+            'buffers_clean', buffers_clean,
+            'buffers_backend', buffers_backend,
+            'buffers_backend_fsync', buffers_backend_fsync,
+            'maxwritten_clean', maxwritten_clean,
+            'stats_reset', COALESCE(stats_reset::text, 'never')
+        )
+        FROM pg_stat_bgwriter
+    ),
+    'invalid_indexes', (
+        SELECT COALESCE(json_agg(json_build_object(
+            'schema', n.nspname,
+            'table', c.relname,
+            'index', i.relname
+        )), '[]'::json)
+        FROM pg_index x
+        JOIN pg_class c ON c.oid = x.indrelid
+        JOIN pg_class i ON i.oid = x.indexrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE NOT x.indisvalid
+    ),
+    'archiver', (
+        SELECT json_build_object(
+            'archived_count', archived_count,
+            'failed_count', failed_count,
+            'last_archived_wal', last_archived_wal,
+            'last_archived_time', COALESCE(last_archived_time::text, 'never'),
+            'last_failed_wal', last_failed_wal,
+            'last_failed_time', COALESCE(last_failed_time::text, 'never'),
+            'stats_reset', COALESCE(stats_reset::text, 'never')
+        )
+        FROM pg_stat_archiver
+    ),
+    'progress_vacuum', (
+        SELECT COALESCE(json_agg(json_build_object(
+            'pid', p.pid,
+            'datname', d.datname,
+            'relname', c.relname,
+            'phase', p.phase,
+            'heap_blks_total', p.heap_blks_total,
+            'heap_blks_scanned', p.heap_blks_scanned,
+            'heap_blks_vacuumed', p.heap_blks_vacuumed,
+            'index_vacuum_count', p.index_vacuum_count,
+            'max_dead_tuples', p.max_dead_tuples,
+            'num_dead_tuples', p.num_dead_tuples
+        )), '[]'::json)
+        FROM pg_stat_progress_vacuum p
+        JOIN pg_database d ON p.datid = d.oid
+        LEFT JOIN pg_class c ON p.relid = c.oid
+    ),
+    'ssl_stats', (
+        SELECT json_build_object(
+            'ssl_connections', (SELECT count(*) FROM pg_stat_ssl WHERE ssl = true),
+            'non_ssl_connections', (SELECT count(*) FROM pg_stat_ssl WHERE ssl = false),
+            'ssl_versions', (
+                SELECT COALESCE(json_agg(json_build_object('version', version, 'count', cnt)), '[]'::json)
+                FROM (SELECT version, count(*) as cnt FROM pg_stat_ssl WHERE ssl = true GROUP BY version) v
+            )
+        )
+    )
+)::text;
+"""
+
+
+def parse_batched_analysis(data: Dict[str, Any], result: AnalysisResult) -> None:
+    """Parse the batched JSON analysis data into the result object."""
+
+    # Connections
+    conn = data.get("connections")
+    if conn:
+        current = conn.get("current", 0)
+        max_conn = conn.get("max", 1)
+        reserved = conn.get("reserved", 3)
+        result.connections = {
+            "current": current,
+            "max": max_conn,
+            "reserved": reserved,
+            "available": max_conn - current - reserved,
+            "percent": round(current / max_conn * 100, 1) if max_conn > 0 else 0,
+            "active": conn.get("active", 0),
+            "idle": conn.get("idle", 0),
+            "idle_in_transaction": conn.get("idle_in_transaction", 0),
+        }
+
+    # Memory config (expanded for tuning analysis)
+    mem_config = data.get("memory_config")
+    if mem_config:
+        result.memory_config = {}
+        for row in mem_config:
+            name = row["name"]
+            setting = row["setting"]
+            unit = row["unit"]
+
+            # Handle different value types
+            if unit == "8kB":
+                # Convert 8kB pages to MB
+                mb = int(setting) * 8 / 1024 if str(setting).isdigit() else 0
+                result.memory_config[name] = {"value": int(setting) if str(setting).isdigit() else 0, "unit": unit, "mb": round(mb, 1)}
+            elif unit == "kB":
+                mb = int(setting) / 1024 if str(setting).isdigit() else 0
+                result.memory_config[name] = {"value": int(setting) if str(setting).isdigit() else 0, "unit": unit, "mb": round(mb, 1)}
+            elif unit == "MB":
+                result.memory_config[name] = {"value": int(setting) if str(setting).isdigit() else 0, "unit": unit, "mb": int(setting) if str(setting).isdigit() else 0}
+            elif unit in ("ms", "s", "min"):
+                # Time-based settings
+                result.memory_config[name] = {"value": setting, "unit": unit}
+            elif name in ("random_page_cost", "checkpoint_completion_target", "autovacuum_vacuum_scale_factor", "autovacuum_analyze_scale_factor"):
+                # Float settings
+                result.memory_config[name] = {"value": float(setting) if setting else 0}
+            elif name in ("synchronous_commit", "autovacuum"):
+                # On/off settings
+                result.memory_config[name] = {"value": setting}
+            else:
+                # Integer settings (max_connections, max_parallel_workers, etc.)
+                result.memory_config[name] = {"value": int(setting) if str(setting).isdigit() else setting}
+
+    # Cache hit
+    cache = data.get("cache_hit")
+    if cache:
+        result.cache_hit = {
+            "table_hit_pct": cache.get("table_hit_pct"),
+            "index_hit_pct": cache.get("index_hit_pct"),
+        }
+
+    # Database stats
+    db_stats = data.get("database_stats")
+    if db_stats:
+        result.database_stats = {
+            "deadlocks": db_stats.get("deadlocks", 0),
+            "temp_files": db_stats.get("temp_files", 0),
+            "temp_bytes": db_stats.get("temp_bytes", 0),
+            "stats_reset": db_stats.get("stats_reset", "unknown"),
+            "blks_read": db_stats.get("blks_read", 0),
+            "blks_hit": db_stats.get("blks_hit", 0),
+            "tup_returned": db_stats.get("tup_returned", 0),
+            "tup_fetched": db_stats.get("tup_fetched", 0),
+            "tup_inserted": db_stats.get("tup_inserted", 0),
+            "tup_updated": db_stats.get("tup_updated", 0),
+            "tup_deleted": db_stats.get("tup_deleted", 0),
+            "conflicts": db_stats.get("conflicts", 0),
+            "checksum_failures": db_stats.get("checksum_failures", 0),
+        }
+
+    # Cache per table
+    cache_per_table = data.get("cache_per_table", [])
+    result.cache_per_table = [
+        {
+            "table": t.get("table_name"),
+            "disk_reads": str(t.get("disk_reads", 0)),
+            "cache_hits": str(t.get("cache_hits", 0)),
+            "hit_pct": str(t.get("hit_pct", 0)),
+        }
+        for t in cache_per_table
+    ]
+
+    # Table sizes
+    table_sizes = data.get("table_sizes", [])
+    result.table_sizes = [
+        {
+            "schema": t.get("schema"),
+            "table": t.get("table_name"),
+            "size": t.get("size"),
+            "total_bytes": str(t.get("total_bytes", 0)),
+            "data_bytes": str(t.get("data_bytes", 0)),
+            "index_bytes": str(t.get("index_bytes", 0)),
+            "row_count": str(t.get("row_count", 0)),
+        }
+        for t in table_sizes
+    ]
+
+    # Size breakdown
+    size = data.get("size_breakdown")
+    if size:
+        result.size_breakdown = {
+            "database_bytes": size.get("database_bytes", 0),
+            "wal_bytes": size.get("wal_bytes", 0),
+            "user_tables_bytes": size.get("user_tables_bytes", 0),
+            "user_indexes_bytes": size.get("user_indexes_bytes", 0),
+            "system_bytes": size.get("system_bytes", 0),
+        }
+
+    # Vacuum health
+    vacuum = data.get("vacuum_health", [])
+    result.vacuum_health = [
+        {
+            "schema": t.get("schema"),
+            "table": t.get("table_name"),
+            "live_rows": str(t.get("live_rows", 0)),
+            "dead_rows": str(t.get("dead_rows", 0)),
+            "dead_pct": str(t.get("dead_pct", 0)),
+            "vacuum_count": str(t.get("vacuum_count", 0)),
+            "autovacuum_count": str(t.get("autovacuum_count", 0)),
+            "last_vacuum": t.get("last_vacuum", "never"),
+            "last_autovacuum": t.get("last_autovacuum", "never"),
+            "last_analyze": t.get("last_analyze", "never"),
+            "xid_age": str(t.get("xid_age", 0)),
+            "needs_vacuum": "true" if t.get("needs_vacuum") else "false",
+            "needs_freeze": "true" if t.get("needs_freeze") else "false",
+        }
+        for t in vacuum
+    ]
+
+    # XID age
+    xid = data.get("xid_age")
+    if xid and xid.get("value") is not None:
+        xid_val = xid["value"]
+        result.xid_age = {
+            "value": xid_val,
+            "millions": round(xid_val / 1_000_000, 1),
+            "pct_to_wraparound": round(xid_val / 2_147_483_647 * 100, 2)
+        }
+
+    # Unused indexes
+    unused = data.get("unused_indexes", [])
+    result.unused_indexes = [
+        {
+            "schema": t.get("schema"),
+            "table": t.get("table_name"),
+            "index": t.get("index_name"),
+            "size": t.get("size"),
+            "size_bytes": str(t.get("size_bytes", 0)),
+            "scans": str(t.get("scans", 0)),
+            "table_seq_scans": str(t.get("table_seq_scans", 0)),
+            "table_idx_scans": str(t.get("table_idx_scans", 0)),
+            "table_rows": str(t.get("table_rows", 0)),
+            "is_primary": t.get("is_primary", False),
+            "is_unique": t.get("is_unique", False),
+            "missing_index_score": str(t.get("missing_index_score", 0)),
+        }
+        for t in unused
+    ]
+
+    # Connection states
+    conn_states = data.get("connection_states", [])
+    result.connection_states = [
+        {"state": t.get("state"), "count": str(t.get("count", 0))}
+        for t in conn_states
+    ]
+
+    # Connections by app
+    conn_app = data.get("connections_by_app", [])
+    result.connections_by_app = [
+        {"app": t.get("app", ""), "count": str(t.get("count", 0))}
+        for t in conn_app
+    ]
+
+    # Connections by age
+    conn_age = data.get("connections_by_age", [])
+    result.connections_by_age = [
+        {"range": t.get("range"), "count": str(t.get("count", 0))}
+        for t in conn_age
+    ]
+
+    # Oldest connection
+    oldest = data.get("oldest_connection_sec")
+    if oldest is not None:
+        result.oldest_connection_sec = oldest
+
+    # Seq scan tables
+    seq_tables = data.get("seq_scan_tables", [])
+    result.seq_scan_tables = [
+        {
+            "table": t.get("table_name"),
+            "seq_scans": str(t.get("seq_scans", 0)),
+            "idx_scans": str(t.get("idx_scans", 0)),
+            "rows": str(t.get("rows", 0)),
+        }
+        for t in seq_tables
+    ]
+
+    # Top queries
+    top_q = data.get("top_queries", [])
+    result.top_queries = [
+        {
+            "query": t.get("query"),
+            "calls": str(t.get("calls", 0)),
+            "total_min": str(t.get("total_min", 0)),
+            "mean_ms": str(t.get("mean_ms", 0)),
+            "max_ms": str(t.get("max_ms", 0)),
+            "rows": str(t.get("rows", 0)),
+            "shared_blks_hit": t.get("shared_blks_hit", 0),
+            "shared_blks_read": t.get("shared_blks_read", 0),
+            "cache_hit_pct": t.get("cache_hit_pct"),
+            "temp_blks_read": t.get("temp_blks_read", 0),
+            "temp_blks_written": t.get("temp_blks_written", 0),
+        }
+        for t in top_q
+    ]
+
+    # Long running queries
+    long_q = data.get("long_running_queries", [])
+    result.long_running_queries = [
+        {
+            "pid": str(t.get("pid")),
+            "duration_sec": str(t.get("duration_sec", 0)),
+            "query": t.get("query"),
+        }
+        for t in long_q
+    ]
+
+    # Idle in transaction
+    idle_txn = data.get("idle_in_transaction", [])
+    result.idle_in_transaction = [
+        {
+            "pid": str(t.get("pid")),
+            "idle_sec": str(t.get("idle_sec", 0)),
+            "user": t.get("username", ""),
+            "app": t.get("app", ""),
+            "last_query": t.get("last_query"),
+        }
+        for t in idle_txn
+    ]
+
+    # Blocked queries
+    blocked = data.get("blocked_queries", [])
+    result.blocked_queries = [
+        {
+            "pid": str(t.get("pid")),
+            "wait_sec": str(t.get("wait_sec", 0)),
+            "user": t.get("username", ""),
+            "blocking_pid": t.get("blocking_pid", ""),
+            "query": t.get("query"),
+        }
+        for t in blocked
+    ]
+
+    # Locks
+    locks = data.get("locks", [])
+    result.locks = [
+        {
+            "locktype": t.get("locktype"),
+            "mode": t.get("mode"),
+            "user": t.get("username", ""),
+            "app": t.get("app", ""),
+            "query": t.get("query"),
+        }
+        for t in locks
+    ]
+
+    # Replication
+    repl = data.get("replication", [])
+    result.replication = [
+        {
+            "client": t.get("client"),
+            "state": t.get("state"),
+            "sent_lsn": t.get("sent_lsn"),
+            "replay_lsn": t.get("replay_lsn"),
+        }
+        for t in repl
+    ]
+
+    # pg_stat_statements installed flag
+    result.pg_stat_statements_installed = data.get("pg_stat_statements_installed", False)
+
+    # Background writer stats
+    bgwriter = data.get("bgwriter")
+    if bgwriter:
+        result.bgwriter = {
+            "checkpoints_timed": bgwriter.get("checkpoints_timed", 0),
+            "checkpoints_req": bgwriter.get("checkpoints_req", 0),
+            "buffers_checkpoint": bgwriter.get("buffers_checkpoint", 0),
+            "buffers_clean": bgwriter.get("buffers_clean", 0),
+            "buffers_backend": bgwriter.get("buffers_backend", 0),
+            "buffers_backend_fsync": bgwriter.get("buffers_backend_fsync", 0),
+            "maxwritten_clean": bgwriter.get("maxwritten_clean", 0),
+            "stats_reset": bgwriter.get("stats_reset", "never"),
+        }
+
+    # Invalid indexes
+    invalid_idx = data.get("invalid_indexes", [])
+    result.invalid_indexes = [
+        {
+            "schema": t.get("schema"),
+            "table": t.get("table"),
+            "index": t.get("index"),
+        }
+        for t in invalid_idx
+    ]
+
+    # WAL archiver stats
+    archiver = data.get("archiver")
+    if archiver:
+        result.archiver = {
+            "archived_count": archiver.get("archived_count", 0),
+            "failed_count": archiver.get("failed_count", 0),
+            "last_archived_wal": archiver.get("last_archived_wal"),
+            "last_archived_time": archiver.get("last_archived_time", "never"),
+            "last_failed_wal": archiver.get("last_failed_wal"),
+            "last_failed_time": archiver.get("last_failed_time", "never"),
+            "stats_reset": archiver.get("stats_reset", "never"),
+        }
+
+    # Vacuum progress
+    progress_vac = data.get("progress_vacuum", [])
+    result.progress_vacuum = [
+        {
+            "pid": t.get("pid"),
+            "datname": t.get("datname"),
+            "relname": t.get("relname"),
+            "phase": t.get("phase"),
+            "heap_blks_total": t.get("heap_blks_total", 0),
+            "heap_blks_scanned": t.get("heap_blks_scanned", 0),
+            "heap_blks_vacuumed": t.get("heap_blks_vacuumed", 0),
+            "index_vacuum_count": t.get("index_vacuum_count", 0),
+            "max_dead_tuples": t.get("max_dead_tuples", 0),
+            "num_dead_tuples": t.get("num_dead_tuples", 0),
+        }
+        for t in progress_vac
+    ]
+
+    # SSL connection stats
+    ssl = data.get("ssl_stats")
+    if ssl:
+        result.ssl_stats = {
+            "ssl_connections": ssl.get("ssl_connections", 0),
+            "non_ssl_connections": ssl.get("non_ssl_connections", 0),
+            "ssl_versions": ssl.get("ssl_versions", []),
+        }
+
+
+def parse_psql_output(output: str, columns: List[str]) -> List[Dict[str, str]]:
+    """Parse psql -t -A output (pipe-separated) into list of dicts."""
+    rows = []
+    for line in output.strip().split("\n"):
+        if not line or line.startswith("("):
+            continue
+        values = line.split("|")
+        if len(values) == len(columns):
+            rows.append(dict(zip(columns, [v.strip() for v in values])))
+    return rows
+
+
+def get_deployment_status(service: str) -> str:
+    """Get deployment status for service."""
+    code, stdout, stderr = run_railway_command(
+        ["service", "status", "--service", service, "--json"]
+    )
+    if code != 0:
+        return "UNKNOWN"
+    try:
+        data = json.loads(stdout)
+        status = data.get("status", "UNKNOWN")
+        if data.get("stopped"):
+            return f"{status} (stopped)"
+        return status
+    except json.JSONDecodeError:
+        return "UNKNOWN"
+
+
+def get_railway_status() -> Optional[Dict[str, Any]]:
+    """Get environment and service IDs from railway status."""
+    code, stdout, stderr = run_railway_command(["status", "--json"])
+    if code != 0:
+        return None
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def get_disk_usage_from_api(environment_id: str, service_id: str) -> Optional[Dict[str, Any]]:
+    """Get disk usage from Railway metrics API."""
+    from datetime import timedelta
+
+    # Build the API query
+    start_date = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+
+    # Use railway-api.sh script
+    import os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    api_script = os.path.join(script_dir, "railway-api.sh")
+
+    if not os.path.exists(api_script):
+        return None
+
+    query = '''query metrics($environmentId: String!, $serviceId: String, $startDate: DateTime!, $measurements: [MetricMeasurement!]!) {
+        metrics(environmentId: $environmentId, serviceId: $serviceId, startDate: $startDate, measurements: $measurements) {
+            measurement values { ts value }
+        }
+    }'''
+
+    variables = json.dumps({
+        "environmentId": environment_id,
+        "serviceId": service_id,
+        "startDate": start_date,
+        "measurements": ["DISK_USAGE_GB"]
+    })
+
+    try:
+        result = subprocess.run(
+            [api_script, query, variables],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode != 0:
+            return None
+
+        data = json.loads(result.stdout)
+        metrics = data.get("data", {}).get("metrics", [])
+
+        for metric in metrics:
+            if metric.get("measurement") == "DISK_USAGE_GB":
+                values = metric.get("values", [])
+                if values:
+                    # Get latest value
+                    latest = values[-1].get("value", 0)
+                    return {
+                        "used_gb": round(latest, 2),
+                        "used": f"{latest:.1f} GB",
+                    }
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        pass
+
+    return None
+
+
+def get_disk_usage(service: str, environment_id: Optional[str] = None, service_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Get disk usage - try API first, fall back to SSH."""
+    # Try Railway API first
+    if environment_id and service_id:
+        api_result = get_disk_usage_from_api(environment_id, service_id)
+        if api_result:
+            return api_result
+
+    # Fall back to SSH
+    command = "df -h /var/lib/postgresql/data 2>/dev/null || df -h / | tail -1"
+    code, stdout, stderr = run_ssh_query(service, command)
+    if code != 0 or not stdout:
+        return None
+
+    # Parse df output: Filesystem Size Used Avail Use% Mounted
+    lines = stdout.strip().split("\n")
+    for line in lines:
+        if line and not line.startswith("Filesystem"):
+            parts = line.split()
+            if len(parts) >= 5:
+                return {
+                    "total": parts[1],
+                    "used": parts[2],
+                    "available": parts[3],
+                    "use_percent": parts[4].rstrip("%"),
+                }
+    return None
+
+
+def get_cpu_memory_from_api(environment_id: str, service_id: str) -> Optional[Dict[str, Any]]:
+    """Get CPU and memory usage from Railway metrics API."""
+    from datetime import timedelta
+    import os
+
+    start_date = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    api_script = os.path.join(script_dir, "railway-api.sh")
+
+    if not os.path.exists(api_script):
+        return None
+
+    query = '''query metrics($environmentId: String!, $serviceId: String, $startDate: DateTime!, $measurements: [MetricMeasurement!]!) {
+        metrics(environmentId: $environmentId, serviceId: $serviceId, startDate: $startDate, measurements: $measurements) {
+            measurement values { ts value }
+        }
+    }'''
+
+    variables = json.dumps({
+        "environmentId": environment_id,
+        "serviceId": service_id,
+        "startDate": start_date,
+        "measurements": ["CPU_USAGE", "MEMORY_USAGE_GB"]
+    })
+
+    try:
+        result = subprocess.run(
+            [api_script, query, variables],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode != 0:
+            return None
+
+        data = json.loads(result.stdout)
+        metrics = data.get("data", {}).get("metrics", [])
+
+        cpu_memory = {}
+        for metric in metrics:
+            measurement = metric.get("measurement")
+            values = metric.get("values", [])
+            if values:
+                latest = values[-1].get("value", 0)
+                if measurement == "CPU_USAGE":
+                    cpu_memory["cpu_percent"] = round(latest, 1)
+                elif measurement == "MEMORY_USAGE_GB":
+                    cpu_memory["memory_gb"] = round(latest, 2)
+
+        return cpu_memory if cpu_memory else None
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        pass
+
+    return None
+
+
+def get_recent_errors(service: str, limit: int = 10) -> List[str]:
+    """Get recent error logs."""
+    code, stdout, stderr = run_railway_command(
+        ["logs", "--service", service, "--lines", "100", "--filter", "@level:error"],
+        timeout=30
+    )
+    if code != 0:
+        return []
+
+    errors = []
+    for line in stdout.strip().split("\n")[:limit]:
+        if line.strip():
+            errors.append(line.strip())
+    return errors
+
+
+def get_cluster_logs(
+    ha_cluster: Optional[Dict[str, Any]],
+    environment_id: Optional[str],
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """Get logs from all HA cluster members via Railway API.
+
+    For HA clusters, each member may be a separate deployment.
+    This function fetches recent logs from each cluster member.
+    """
+    if not ha_cluster or not environment_id:
+        return []
+
+    members = ha_cluster.get("members", [])
+    if not members:
+        return []
+
+    import os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    api_script = os.path.join(script_dir, "railway-api.sh")
+
+    if not os.path.exists(api_script):
+        return []
+
+    cluster_logs = []
+
+    # Query to get deployments for the environment
+    deployment_query = '''query deployments($environmentId: String!) {
+        deployments(input: { environmentId: $environmentId }) {
+            edges { node { id status staticUrl service { id name } } }
+        }
+    }'''
+
+    try:
+        result = subprocess.run(
+            [api_script, deployment_query, json.dumps({"environmentId": environment_id})],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode != 0:
+            return []
+
+        data = json.loads(result.stdout)
+        deployments = data.get("data", {}).get("deployments", {}).get("edges", [])
+
+        # Find deployments that match cluster member names
+        member_names = {m.get("name", "").lower() for m in members}
+
+        for edge in deployments:
+            deployment = edge.get("node", {})
+            deployment_id = deployment.get("id")
+            service_name = deployment.get("service", {}).get("name", "").lower()
+            status = deployment.get("status")
+
+            # Check if this deployment corresponds to a cluster member
+            is_member = any(
+                member_name in service_name or service_name in member_name
+                for member_name in member_names
+            )
+
+            if not is_member and status != "SUCCESS":
+                continue
+
+            if not deployment_id:
+                continue
+
+            # Fetch logs for this deployment
+            log_query = '''query deploymentLogs($deploymentId: String!, $limit: Int) {
+                deploymentLogs(deploymentId: $deploymentId, limit: $limit) {
+                    timestamp message severity
+                }
+            }'''
+
+            log_result = subprocess.run(
+                [api_script, log_query, json.dumps({
+                    "deploymentId": deployment_id,
+                    "limit": limit
+                })],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if log_result.returncode == 0:
+                log_data = json.loads(log_result.stdout)
+                logs = log_data.get("data", {}).get("deploymentLogs", [])
+                if logs:
+                    cluster_logs.append({
+                        "member": service_name,
+                        "deployment_id": deployment_id,
+                        "status": status,
+                        "logs": logs[-limit:],  # Last N logs
+                    })
+
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        pass
+
+    return cluster_logs
+
+
+def analyze_postgres(service: str) -> AnalysisResult:
+    """Run complete Postgres analysis with maximum data collection.
+
+    Uses a single batched SQL query to collect all database metrics,
+    minimizing SSH connections (~3 total instead of ~22).
+    """
+    result = AnalysisResult(
+        service=service,
+        db_type="postgres",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+
+    # Get railway context for API calls
+    railway_status = get_railway_status()
+    environment_id = railway_status.get("environmentId") if railway_status else None
+    service_id = railway_status.get("serviceId") if railway_status else None
+
+    # Deployment status (CLI call, not SSH)
+    result.deployment_status = get_deployment_status(service)
+
+    # Disk usage (API first, SSH fallback if needed)
+    result.disk_usage = get_disk_usage(service, environment_id, service_id)
+
+    # CPU/Memory from API (no SSH needed)
+    if environment_id and service_id:
+        result.cpu_memory = get_cpu_memory_from_api(environment_id, service_id)
+
+    # === SINGLE BATCHED SQL QUERY FOR ALL DATABASE METRICS ===
+    # This replaces ~20 individual SSH connections with ONE
+    # Uses stdin to avoid shell quoting issues with single quotes in SQL
+    analysis_query = build_analysis_query()
+    code, stdout, stderr = run_psql_query_safe(service, analysis_query, timeout=120)
+
+    if code == 0 and stdout:
+        try:
+            data = json.loads(stdout.strip())
+            parse_batched_analysis(data, result)
+        except json.JSONDecodeError as e:
+            result.errors.append(f"Failed to parse batched analysis JSON: {e}")
+    else:
+        result.errors.append(f"Batched analysis query failed: {stderr or stdout}")
+
+    # === NON-SQL COMMANDS (separate SSH calls) ===
+
+    # HA cluster status (Patroni) - requires curl, not SQL
+    code, stdout, stderr = run_ssh_query(service, "curl -s localhost:8008/cluster 2>/dev/null || echo '{}'")
+    if code == 0 and stdout and stdout.strip() != "{}":
+        try:
+            patroni_data = json.loads(stdout)
+            members = patroni_data.get("members", [])
+            if members:
+                result.ha_cluster = {
+                    "members": [
+                        {
+                            "name": m.get("name"),
+                            "role": m.get("role"),
+                            "state": m.get("state"),
+                            "timeline": m.get("timeline"),
+                            "lag": m.get("lag"),
+                        }
+                        for m in members
+                    ]
+                }
+        except json.JSONDecodeError:
+            pass
+
+    # Collect logs from all HA cluster members (API call, not SSH)
+    if result.ha_cluster and environment_id:
+        result.cluster_logs = get_cluster_logs(result.ha_cluster, environment_id, limit=5000)
+
+    # Recent errors from logs (CLI call, not SSH)
+    result.recent_errors = get_recent_errors(service, limit=100)
+
+    # Generate recommendations
+    result.recommendations = generate_recommendations(result)
+
+    return result
+
+
+def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
+    """Generate recommendations based on analysis results."""
+    recommendations = []
+
+    # === POSTGRESQL TUNING RECOMMENDATIONS ===
+    # Based on best practices from PostgreSQL wiki and community
+    if result.memory_config:
+        mem = result.memory_config
+
+        # Get system memory from CPU/memory metrics if available
+        system_memory_gb = None
+        if result.cpu_memory and "memory_gb" in result.cpu_memory:
+            # This is current usage, estimate total as ~2x if usage is moderate
+            system_memory_gb = result.cpu_memory["memory_gb"] * 2  # rough estimate
+
+        # shared_buffers check (should be ~25% of RAM, max ~40%)
+        shared_buffers = mem.get("shared_buffers", {})
+        if shared_buffers and shared_buffers.get("mb"):
+            sb_mb = shared_buffers["mb"]
+            # Flag if shared_buffers is very low (< 128MB) - likely default
+            if sb_mb < 128:
+                recommendations.append({
+                    "priority": "immediate",
+                    "issue": f"shared_buffers is only {sb_mb}MB (likely default)",
+                    "action": "Increase shared_buffers to 25% of available RAM. For 1GB RAM, use 256MB. For 4GB, use 1GB.",
+                })
+            elif sb_mb < 256:
+                recommendations.append({
+                    "priority": "short-term",
+                    "issue": f"shared_buffers is {sb_mb}MB - may be undersized",
+                    "action": "Consider increasing shared_buffers to 25% of available RAM for better cache performance.",
+                })
+
+        # effective_cache_size check (should be 50-75% of RAM)
+        effective_cache = mem.get("effective_cache_size", {})
+        if effective_cache and effective_cache.get("mb"):
+            ec_mb = effective_cache["mb"]
+            # Flag if effective_cache_size seems low
+            if ec_mb < 512:
+                recommendations.append({
+                    "priority": "short-term",
+                    "issue": f"effective_cache_size is {ec_mb}MB - may cause poor query plans",
+                    "action": "Set effective_cache_size to 50-75% of total RAM. This helps the query planner make better decisions.",
+                })
+
+        # work_mem check (per-operation memory for sorts/hashes)
+        work_mem = mem.get("work_mem", {})
+        if work_mem and work_mem.get("mb"):
+            wm_mb = work_mem["mb"]
+            # Flag if work_mem is at default (4MB) with high temp file usage
+            if result.database_stats:
+                temp_files = result.database_stats.get("temp_files", 0)
+                if wm_mb <= 4 and temp_files > 1000:
+                    recommendations.append({
+                        "priority": "immediate",
+                        "issue": f"work_mem is only {wm_mb}MB with {temp_files:,} temp files - queries spilling to disk",
+                        "action": "Increase work_mem to 16-64MB. Formula: (RAM / max_connections) / 4. Caution: each sort/hash uses this much.",
+                    })
+                elif wm_mb <= 4:
+                    recommendations.append({
+                        "priority": "long-term",
+                        "issue": f"work_mem is at default ({wm_mb}MB)",
+                        "action": "Consider increasing work_mem for complex queries. Start with 16-32MB and monitor temp file usage.",
+                    })
+
+        # maintenance_work_mem check
+        maint_mem = mem.get("maintenance_work_mem", {})
+        if maint_mem and maint_mem.get("mb"):
+            mm_mb = maint_mem["mb"]
+            if mm_mb < 64:
+                recommendations.append({
+                    "priority": "short-term",
+                    "issue": f"maintenance_work_mem is {mm_mb}MB - VACUUM and CREATE INDEX will be slow",
+                    "action": "Increase maintenance_work_mem to 256MB-1GB for faster maintenance operations.",
+                })
+
+        # random_page_cost check (default 4.0, should be 1.1-2.0 for SSD)
+        rpc = mem.get("random_page_cost", {})
+        if rpc and rpc.get("value"):
+            rpc_val = float(rpc["value"])
+            if rpc_val >= 4.0:
+                recommendations.append({
+                    "priority": "short-term",
+                    "issue": f"random_page_cost is {rpc_val} (HDD default) - Railway uses SSDs",
+                    "action": "Set random_page_cost to 1.1-2.0 for SSD storage. This helps the planner prefer index scans.",
+                })
+
+        # checkpoint_completion_target check (should be 0.9)
+        cct = mem.get("checkpoint_completion_target", {})
+        if cct and cct.get("value"):
+            cct_val = float(cct["value"])
+            if cct_val < 0.9:
+                recommendations.append({
+                    "priority": "long-term",
+                    "issue": f"checkpoint_completion_target is {cct_val} - I/O may be spiky",
+                    "action": "Set checkpoint_completion_target to 0.9 to spread checkpoint I/O over 90% of the interval.",
+                })
+
+        # max_parallel_workers check
+        mpw = mem.get("max_parallel_workers", {})
+        mpwpg = mem.get("max_parallel_workers_per_gather", {})
+        if mpw and mpw.get("value") == 0:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": "max_parallel_workers is 0 - parallel queries disabled",
+                "action": "Set max_parallel_workers to number of CPU cores for faster analytical queries.",
+            })
+        elif mpwpg and mpwpg.get("value") == 0:
+            recommendations.append({
+                "priority": "long-term",
+                "issue": "max_parallel_workers_per_gather is 0 - parallel queries won't use workers",
+                "action": "Set max_parallel_workers_per_gather to 2-4 to enable parallel query execution.",
+            })
+
+        # autovacuum check
+        autovac = mem.get("autovacuum", {})
+        if autovac and autovac.get("value") == "off":
+            recommendations.append({
+                "priority": "immediate",
+                "issue": "autovacuum is DISABLED - database will bloat and eventually fail",
+                "action": "Enable autovacuum immediately. Disabling it causes table bloat, poor performance, and eventual XID wraparound.",
+            })
+
+        # synchronous_commit info (not a warning, just info)
+        sync = mem.get("synchronous_commit", {})
+        if sync and sync.get("value") == "off":
+            recommendations.append({
+                "priority": "long-term",
+                "issue": "synchronous_commit is off - faster writes but risk of data loss on crash",
+                "action": "This is acceptable for non-critical data. For critical data, set synchronous_commit to 'on'.",
+            })
+
+    # pg_stat_statements not available
+    if not result.top_queries:
+        recommendations.append({
+            "priority": "short-term",
+            "issue": "pg_stat_statements extension not available - cannot analyze query performance",
+            "action": "Ask user if they want to enable it, then run: python3 scripts/enable-pg-stats.py --service <name> (may require database restart)",
+        })
+
+    # Cache hit ratio
+    if result.cache_hit:
+        table_hit = result.cache_hit.get("table_hit_pct")
+        if table_hit is not None and table_hit < 95:
+            priority = "immediate" if table_hit < 90 else "short-term"
+            recommendations.append({
+                "priority": priority,
+                "issue": f"Table cache hit ratio is {table_hit}% (should be >95%)",
+                "action": "Increase shared_buffers or analyze per-table cache rates",
+            })
+
+    # Per-table cache - check for low hit rates with high disk reads
+    for table in result.cache_per_table:
+        try:
+            hit_pct = float(table.get("hit_pct") or 100)
+            disk_reads = int(table.get("disk_reads") or 0)
+        except (ValueError, TypeError):
+            continue
+
+        if hit_pct < 50 and disk_reads > 1_000_000:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"Table '{table['table']}' has {hit_pct}% cache hit with {disk_reads:,} disk reads",
+                "action": "Increase shared_buffers - this table is causing heavy disk I/O",
+            })
+        elif hit_pct < 80 and disk_reads > 10_000_000:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"Table '{table['table']}' has {hit_pct}% cache hit with {disk_reads:,} disk reads",
+                "action": "Consider increasing shared_buffers for better caching",
+            })
+
+    # Memory config
+    if result.memory_config and result.table_sizes:
+        shared_buffers_mb = result.memory_config.get("shared_buffers", {}).get("mb", 0)
+        total_table_bytes = sum(int(t.get("bytes", 0)) for t in result.table_sizes)
+        total_table_mb = total_table_bytes / 1024 / 1024
+
+        if shared_buffers_mb > 0 and total_table_mb > shared_buffers_mb * 4:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"shared_buffers ({shared_buffers_mb}MB) is much smaller than working set (~{round(total_table_mb)}MB)",
+                "action": f"Increase shared_buffers to at least {round(total_table_mb / 4)}MB",
+            })
+
+    # Vacuum health (using enhanced flags)
+    for table in result.vacuum_health:
+        dead_pct = float(table.get("dead_pct", 0))
+        needs_vacuum = table.get("needs_vacuum") == "true"
+        needs_freeze = table.get("needs_freeze") == "true"
+
+        # Check needs_freeze flag first (more urgent)
+        if needs_freeze:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"Table '{table['table']}' needs FREEZE (XID age > 150M)",
+                "action": f"Run: VACUUM FREEZE \"{table['table']}\";",
+            })
+        elif needs_vacuum:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"Table '{table['table']}' needs VACUUM ({dead_pct}% dead rows)",
+                "action": f"Run: VACUUM ANALYZE \"{table['table']}\";",
+            })
+        elif dead_pct > 20:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"Table '{table['table']}' has {dead_pct}% dead rows",
+                "action": f"Run: VACUUM ANALYZE \"{table['table']}\";",
+            })
+        elif dead_pct > 10:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"Table '{table['table']}' has {dead_pct}% dead rows",
+                "action": f"Run: VACUUM ANALYZE \"{table['table']}\";",
+            })
+
+    # XID age
+    if result.xid_age:
+        xid_millions = result.xid_age.get("millions", 0)
+        if xid_millions > 150:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"XID age is {xid_millions}M (wraparound risk at 2147M)",
+                "action": "Run VACUUM FREEZE on all databases",
+            })
+        elif xid_millions > 100:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"XID age is {xid_millions}M (approaching wraparound risk)",
+                "action": "Monitor autovacuum and consider manual VACUUM FREEZE",
+            })
+
+    # Database stats (deadlocks, temp files)
+    if result.database_stats:
+        deadlocks = result.database_stats.get("deadlocks", 0)
+        if deadlocks > 0:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"{deadlocks} deadlock(s) detected since last stats reset",
+                "action": "Review application transaction logic and lock ordering",
+            })
+
+        # Temp files - flag with description
+        temp_files = result.database_stats.get("temp_files", 0)
+        temp_bytes = result.database_stats.get("temp_bytes", 0)
+        temp_gb = round(temp_bytes / 1024 / 1024 / 1024, 1) if temp_bytes > 0 else 0
+        # Only flag if significant cumulative usage
+        if temp_files > 10000 or temp_gb > 10:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"High temp file usage: {temp_files:,} files, {temp_gb} GB written (cumulative since stats reset)",
+                "action": "Queries are spilling to disk for sorts/hashes/joins. Increase work_mem to give queries more RAM for in-memory operations.",
+            })
+
+    # Connection usage
+    if result.connections:
+        pct = result.connections.get("percent", 0)
+        if pct > 90:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"Connection usage is {pct}%",
+                "action": "Use connection pooling (PgBouncer) or increase max_connections",
+            })
+        elif pct > 70:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"Connection usage is {pct}%",
+                "action": "Consider connection pooling for scalability",
+            })
+
+    # Old connections
+    if result.oldest_connection_sec is not None:
+        age_hours = result.oldest_connection_sec / 3600
+        if age_hours > 48:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"Oldest connection is {round(age_hours, 1)} hours old",
+                "action": "Review connection pooling settings and application connection management",
+            })
+
+    # Disk usage
+    if result.disk_usage:
+        use_pct = int(result.disk_usage.get("use_percent", 0))
+        if use_pct > 85:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"Disk usage is {use_pct}%",
+                "action": "Increase volume size or clean up data",
+            })
+        elif use_pct > 70:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"Disk usage is {use_pct}%",
+                "action": "Plan for volume expansion",
+            })
+
+    # Unused indexes - only flag non-PK, non-unique indexes >100MB
+    droppable_indexes = [
+        idx for idx in result.unused_indexes
+        if not idx.get("is_primary") and not idx.get("is_unique")
+        and int(idx.get("size_bytes", 0)) > 100 * 1024 * 1024
+    ]
+    if droppable_indexes:
+        total_size = sum_index_sizes(droppable_indexes)
+        recommendations.append({
+            "priority": "long-term",
+            "issue": f"{len(droppable_indexes)} unused non-constraint indexes >100MB ({total_size})",
+            "action": "Review and drop unused indexes to save space and improve write performance",
+        })
+
+    # Tables with high missing index score (lots of seq scans, no index usage)
+    for idx in result.unused_indexes:
+        try:
+            missing_score = int(idx.get("missing_index_score", 0))
+            if missing_score > 1000:
+                recommendations.append({
+                    "priority": "short-term",
+                    "issue": f"Table '{idx['table']}' has {missing_score} sequential scans with no index usage",
+                    "action": f"Consider adding an index on commonly filtered columns of '{idx['table']}'",
+                })
+        except (ValueError, TypeError):
+            pass
+
+    # Long-running queries
+    if result.long_running_queries:
+        for q in result.long_running_queries[:3]:
+            try:
+                duration = int(q.get("duration_sec", 0))
+                if duration > 60:
+                    recommendations.append({
+                        "priority": "immediate",
+                        "issue": f"Query running for {duration}s (PID {q.get('pid')})",
+                        "action": "Investigate and potentially terminate with pg_cancel_backend()",
+                    })
+            except (ValueError, TypeError):
+                pass
+
+    # Idle in transaction (stuck transactions)
+    if result.idle_in_transaction:
+        for txn in result.idle_in_transaction[:3]:
+            try:
+                idle_sec = int(txn.get("idle_sec", 0))
+                if idle_sec > 300:  # 5 minutes
+                    recommendations.append({
+                        "priority": "immediate",
+                        "issue": f"Transaction idle for {idle_sec}s (PID {txn.get('pid')}, user: {txn.get('user', 'unknown')})",
+                        "action": "Terminate with pg_terminate_backend() - idle transactions block vacuum and hold locks",
+                    })
+                elif idle_sec > 60:
+                    recommendations.append({
+                        "priority": "short-term",
+                        "issue": f"Transaction idle for {idle_sec}s (PID {txn.get('pid')})",
+                        "action": "Review application connection handling and transaction management",
+                    })
+            except (ValueError, TypeError):
+                pass
+
+    # Blocked queries
+    if result.blocked_queries:
+        for q in result.blocked_queries[:3]:
+            try:
+                wait_sec = int(q.get("wait_sec", 0))
+                if wait_sec > 30:
+                    recommendations.append({
+                        "priority": "immediate",
+                        "issue": f"Query waiting {wait_sec}s for lock (PID {q.get('pid')} blocked by {q.get('blocking_pid')})",
+                        "action": "Check blocking query and consider terminating if stuck",
+                    })
+            except (ValueError, TypeError):
+                pass
+
+    # Lock contention
+    if result.locks:
+        recommendations.append({
+            "priority": "immediate",
+            "issue": f"{len(result.locks)} blocked lock(s) detected",
+            "action": "Investigate lock contention - may indicate long transactions or deadlocks",
+        })
+
+    # Sequential scans on large tables
+    for table in result.seq_scan_tables:
+        try:
+            seq_scans = int(table.get("seq_scans", 0))
+            idx_scans = int(table.get("idx_scans", 0))
+            rows = int(table.get("rows", 0))
+            if seq_scans > 1000 and idx_scans == 0 and rows > 10000:
+                recommendations.append({
+                    "priority": "short-term",
+                    "issue": f"Table '{table['table']}' has {seq_scans} sequential scans with 0 index scans",
+                    "action": "Consider adding an index based on common query patterns",
+                })
+        except (ValueError, TypeError):
+            pass
+
+    # HA cluster issues
+    if result.ha_cluster:
+        members = result.ha_cluster.get("members", [])
+        for m in members:
+            state = m.get("state", "")
+            if state == "start failed":
+                recommendations.append({
+                    "priority": "immediate",
+                    "issue": f"HA replica '{m.get('name')}' is in 'start failed' state",
+                    "action": "Check timeline divergence - may need pg_basebackup to resync",
+                })
+            elif state not in ("running", "streaming"):
+                recommendations.append({
+                    "priority": "short-term",
+                    "issue": f"HA replica '{m.get('name')}' is in '{state}' state",
+                    "action": "Investigate replica health",
+                })
+
+    # Recent errors
+    if result.recent_errors and len(result.recent_errors) > 5:
+        recommendations.append({
+            "priority": "short-term",
+            "issue": f"{len(result.recent_errors)} recent errors in logs",
+            "action": "Review error logs for patterns",
+        })
+
+    # Invalid indexes
+    if result.invalid_indexes:
+        for idx in result.invalid_indexes:
+            recommendations.append({
+                "priority": "immediate",
+                "issue": f"Invalid index '{idx.get('index')}' on {idx.get('schema')}.{idx.get('table')} - not being used",
+                "action": f"Drop and recreate: DROP INDEX CONCURRENTLY \"{idx.get('index')}\"; then recreate it",
+            })
+
+    # WAL archiver failures
+    if result.archiver and result.archiver.get("failed_count", 0) > 0:
+        recommendations.append({
+            "priority": "immediate",
+            "issue": f"WAL archiver has {result.archiver['failed_count']} failed archival(s)",
+            "action": "Check archive_command configuration and destination storage",
+        })
+
+    # Background writer issues
+    if result.bgwriter:
+        bg = result.bgwriter
+        # High backend fsync indicates shared_buffers pressure
+        if bg.get("buffers_backend_fsync", 0) > 0:
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"Backend processes forced {bg['buffers_backend_fsync']:,} fsync operations",
+                "action": "Increase shared_buffers - backends are flushing dirty buffers themselves",
+            })
+
+        # Check if most checkpoints are requested (not timed)
+        timed = bg.get("checkpoints_timed", 0)
+        req = bg.get("checkpoints_req", 0)
+        total = timed + req
+        if total > 10 and req > timed:
+            req_pct = round(100.0 * req / total, 1)
+            recommendations.append({
+                "priority": "short-term",
+                "issue": f"{req_pct}% of checkpoints are requested (not timed) - WAL is filling up",
+                "action": "Increase max_wal_size and checkpoint_completion_target for smoother I/O",
+            })
+
+        # High maxwritten_clean indicates bgwriter can't keep up
+        if bg.get("maxwritten_clean", 0) > 100:
+            recommendations.append({
+                "priority": "long-term",
+                "issue": f"Background writer hit max write limit {bg['maxwritten_clean']:,} times",
+                "action": "Increase bgwriter_lru_maxpages to let bgwriter flush more buffers per round",
+            })
+
+    return recommendations
+
+
+def sum_index_sizes(indexes: List[Dict[str, Any]]) -> str:
+    """Sum up index sizes and return human-readable string."""
+    total_bytes = 0
+    for idx in indexes:
+        size_str = idx.get("size", "0")
+        # Parse sizes like "23 MB", "8448 kB", etc.
+        match = re.match(r"(\d+)\s*(MB|kB|GB|bytes?)?", size_str, re.IGNORECASE)
+        if match:
+            value = int(match.group(1))
+            unit = (match.group(2) or "bytes").upper()
+            if unit in ("KB", "KB"):
+                total_bytes += value * 1024
+            elif unit == "MB":
+                total_bytes += value * 1024 * 1024
+            elif unit == "GB":
+                total_bytes += value * 1024 * 1024 * 1024
+            else:
+                total_bytes += value
+
+    if total_bytes >= 1024 * 1024 * 1024:
+        return f"{total_bytes / 1024 / 1024 / 1024:.1f} GB"
+    elif total_bytes >= 1024 * 1024:
+        return f"{total_bytes / 1024 / 1024:.1f} MB"
+    elif total_bytes >= 1024:
+        return f"{total_bytes / 1024:.1f} KB"
+    return f"{total_bytes} bytes"
+
+
+def format_report(result: AnalysisResult) -> str:
+    """Format analysis result as human-readable report."""
+    lines = []
+    lines.append("=" * 60)
+    lines.append(f"Database Analysis: {result.service}")
+    lines.append("=" * 60)
+    lines.append(f"Type: {result.db_type}")
+    lines.append(f"Generated: {result.timestamp}")
+    lines.append(f"Status: {result.deployment_status}")
+    lines.append("")
+
+    # Summary table
+    lines.append("## Summary")
+    lines.append("")
+    lines.append("| Metric | Value | Status |")
+    lines.append("|--------|-------|--------|")
+
+    # Deployment
+    status_icon = "Healthy" if result.deployment_status == "SUCCESS" else "Warning"
+    lines.append(f"| Deployment | {result.deployment_status} | {status_icon} |")
+
+    # Connections
+    if result.connections:
+        pct = result.connections["percent"]
+        current = result.connections["current"]
+        max_conn = result.connections["max"]
+        reserved = result.connections.get("reserved", 3)
+        available = result.connections.get("available", max_conn - current)
+        active = result.connections.get("active", 0)
+        idle = result.connections.get("idle", 0)
+        idle_in_txn = result.connections.get("idle_in_transaction", 0)
+        status = "Critical" if pct > 90 else "Warning" if pct > 70 else "Healthy"
+        lines.append(f"| Connections | {current} / {max_conn} ({pct}%) | {status} |")
+        lines.append(f"| - Active/Idle/IdleTxn | {active} / {idle} / {idle_in_txn} | {'Warning' if idle_in_txn > 5 else '-'} |")
+        lines.append(f"| - Available | {available} (reserved: {reserved}) | - |")
+
+    # Database size
+    if result.size_breakdown and result.size_breakdown.get("database_bytes"):
+        db_bytes = result.size_breakdown["database_bytes"]
+        db_gb = round(db_bytes / 1024 / 1024 / 1024, 2)
+        lines.append(f"| Database Size | {db_gb} GB | - |")
+
+    # Disk
+    if result.disk_usage:
+        pct = int(result.disk_usage["use_percent"])
+        status = "Critical" if pct > 85 else "Warning" if pct > 70 else "Healthy"
+        lines.append(f"| Disk | {result.disk_usage['used']} / {result.disk_usage['total']} ({pct}%) | {status} |")
+
+    # Cache hit
+    if result.cache_hit:
+        table_hit = result.cache_hit.get("table_hit_pct")
+        if table_hit is not None:
+            status = "Healthy" if table_hit >= 99 else "OK" if table_hit >= 95 else "Warning" if table_hit >= 90 else "Critical"
+            lines.append(f"| Table Cache Hit | {table_hit}% | {status} |")
+
+        index_hit = result.cache_hit.get("index_hit_pct")
+        if index_hit is not None:
+            status = "Healthy" if index_hit >= 99 else "OK" if index_hit >= 95 else "Warning"
+            lines.append(f"| Index Cache Hit | {index_hit}% | {status} |")
+
+    # Memory config summary
+    if result.memory_config:
+        if "shared_buffers" in result.memory_config:
+            sb = result.memory_config["shared_buffers"]
+            mb = sb.get("mb", 0)
+            status = "Warning" if mb < 128 else "OK" if mb < 256 else "Healthy"
+            lines.append(f"| shared_buffers | {mb} MB | {status} |")
+        if "work_mem" in result.memory_config:
+            wm = result.memory_config["work_mem"]
+            mb = wm.get("mb", 0)
+            status = "Default" if mb <= 4 else "OK"
+            lines.append(f"| work_mem | {mb} MB | {status} |")
+
+    # XID age
+    if result.xid_age:
+        millions = result.xid_age["millions"]
+        status = "Critical" if millions > 150 else "Warning" if millions > 100 else "Healthy"
+        lines.append(f"| XID Age | {millions}M | {status} |")
+
+    # CPU/Memory
+    if result.cpu_memory:
+        if "cpu_percent" in result.cpu_memory:
+            cpu = result.cpu_memory["cpu_percent"]
+            status = "Critical" if cpu > 85 else "Warning" if cpu > 70 else "Healthy"
+            lines.append(f"| CPU Usage | {cpu}% | {status} |")
+        if "memory_gb" in result.cpu_memory:
+            mem = result.cpu_memory["memory_gb"]
+            lines.append(f"| Memory Usage | {mem} GB | - |")
+
+    # Database stats
+    if result.database_stats:
+        stats_reset = result.database_stats.get("stats_reset", "unknown")
+        # Shorten timestamp to just date if it's a full timestamp
+        if stats_reset and stats_reset != "unknown" and stats_reset != "never" and len(stats_reset) > 10:
+            stats_reset = stats_reset[:10]
+        lines.append(f"| Stats Reset | {stats_reset} | - |")
+        deadlocks = result.database_stats.get("deadlocks", 0)
+        temp_files = result.database_stats.get("temp_files", 0)
+        temp_bytes = result.database_stats.get("temp_bytes", 0)
+        temp_gb = round(temp_bytes / 1024 / 1024 / 1024, 2) if temp_bytes > 0 else 0
+        status = "Warning" if deadlocks > 0 else "Healthy"
+        lines.append(f"| Deadlocks | {deadlocks} (since reset) | {status} |")
+        lines.append(f"| Temp Files | {temp_files:,} ({temp_gb} GB since reset) | - |")
+
+    # Size breakdown
+    if result.size_breakdown:
+        wal_bytes = result.size_breakdown.get("wal_bytes", 0)
+        wal_mb = round(wal_bytes / 1024 / 1024, 1)
+        lines.append(f"| WAL Size | {wal_mb} MB | - |")
+
+    # Oldest connection
+    if result.oldest_connection_sec is not None:
+        age_hrs = round(result.oldest_connection_sec / 3600, 1)
+        status = "Warning" if age_hrs > 24 else "Healthy"
+        lines.append(f"| Oldest Connection | {age_hrs} hrs | {status} |")
+
+    # pg_stat_statements extension
+    pss_status = "Installed" if result.pg_stat_statements_installed else "Not installed"
+    pss_icon = "OK" if result.pg_stat_statements_installed else "Info"
+    lines.append(f"| pg_stat_statements | {pss_status} | {pss_icon} |")
+
+    lines.append("")
+
+    # PostgreSQL Configuration (tuning parameters)
+    if result.memory_config:
+        lines.append("## PostgreSQL Configuration")
+        lines.append("")
+        lines.append("| Parameter | Value | Recommended | Status |")
+        lines.append("|-----------|-------|-------------|--------|")
+
+        mem = result.memory_config
+
+        # Memory settings
+        if "shared_buffers" in mem:
+            sb = mem["shared_buffers"]
+            mb = sb.get("mb", 0)
+            status = "Low" if mb < 128 else "Default" if mb < 256 else "OK"
+            lines.append(f"| shared_buffers | {mb} MB | 25% of RAM | {status} |")
+
+        if "effective_cache_size" in mem:
+            ec = mem["effective_cache_size"]
+            mb = ec.get("mb", 0)
+            status = "Low" if mb < 512 else "OK"
+            lines.append(f"| effective_cache_size | {mb} MB | 50-75% of RAM | {status} |")
+
+        if "work_mem" in mem:
+            wm = mem["work_mem"]
+            mb = wm.get("mb", 0)
+            status = "Default" if mb <= 4 else "OK"
+            lines.append(f"| work_mem | {mb} MB | 16-64 MB | {status} |")
+
+        if "maintenance_work_mem" in mem:
+            mm = mem["maintenance_work_mem"]
+            mb = mm.get("mb", 0)
+            status = "Low" if mb < 64 else "OK"
+            lines.append(f"| maintenance_work_mem | {mb} MB | 256-1024 MB | {status} |")
+
+        # WAL settings
+        if "wal_buffers" in mem:
+            wb = mem["wal_buffers"]
+            mb = wb.get("mb", 0)
+            lines.append(f"| wal_buffers | {mb} MB | 16 MB | OK |")
+
+        if "checkpoint_completion_target" in mem:
+            cct = mem["checkpoint_completion_target"]
+            val = cct.get("value", 0)
+            status = "Low" if float(val) < 0.9 else "OK"
+            lines.append(f"| checkpoint_completion_target | {val} | 0.9 | {status} |")
+
+        # Parallelism
+        if "max_parallel_workers" in mem:
+            mpw = mem["max_parallel_workers"]
+            val = mpw.get("value", 0)
+            status = "Disabled" if val == 0 else "OK"
+            lines.append(f"| max_parallel_workers | {val} | CPU cores | {status} |")
+
+        if "max_parallel_workers_per_gather" in mem:
+            mpwpg = mem["max_parallel_workers_per_gather"]
+            val = mpwpg.get("value", 0)
+            status = "Disabled" if val == 0 else "OK"
+            lines.append(f"| max_parallel_workers_per_gather | {val} | 2-4 | {status} |")
+
+        # Planner
+        if "random_page_cost" in mem:
+            rpc = mem["random_page_cost"]
+            val = rpc.get("value", 4.0)
+            status = "HDD default" if float(val) >= 4.0 else "SSD optimized" if float(val) <= 2.0 else "OK"
+            lines.append(f"| random_page_cost | {val} | 1.1-2.0 (SSD) | {status} |")
+
+        if "default_statistics_target" in mem:
+            dst = mem["default_statistics_target"]
+            val = dst.get("value", 100)
+            lines.append(f"| default_statistics_target | {val} | 100-500 | OK |")
+
+        # Autovacuum
+        if "autovacuum" in mem:
+            av = mem["autovacuum"]
+            val = av.get("value", "on")
+            status = "CRITICAL" if val == "off" else "OK"
+            lines.append(f"| autovacuum | {val} | on | {status} |")
+
+        # Durability
+        if "synchronous_commit" in mem:
+            sc = mem["synchronous_commit"]
+            val = sc.get("value", "on")
+            status = "Faster (risk)" if val == "off" else "Safe"
+            lines.append(f"| synchronous_commit | {val} | on (safe) | {status} |")
+
+        lines.append("")
+
+    # Connection states
+    if result.connection_states:
+        lines.append("## Connection States")
+        lines.append("")
+        lines.append("| State | Count |")
+        lines.append("|-------|-------|")
+        for s in result.connection_states:
+            lines.append(f"| {s.get('state', 'unknown')} | {s.get('count', 0)} |")
+        lines.append("")
+
+    # Connections by application
+    if result.connections_by_app:
+        lines.append("## Connections by Application")
+        lines.append("")
+        lines.append("| Application | Count |")
+        lines.append("|-------------|-------|")
+        for c in result.connections_by_app[:10]:
+            app = c.get('app', '') or '(empty)'
+            lines.append(f"| {app} | {c.get('count', 0)} |")
+        lines.append("")
+
+    # Connections by age
+    if result.connections_by_age:
+        lines.append("## Connections by Age")
+        lines.append("")
+        lines.append("| Age Range | Count |")
+        lines.append("|-----------|-------|")
+        for c in result.connections_by_age:
+            lines.append(f"| {c.get('range', '')} | {c.get('count', 0)} |")
+        lines.append("")
+
+    # Per-table cache
+    if result.cache_per_table:
+        lines.append("## Per-Table Cache Hit Rates")
+        lines.append("")
+        lines.append("| Table | Hit % | Disk Reads | Status |")
+        lines.append("|-------|-------|------------|--------|")
+        for t in result.cache_per_table[:10]:
+            hit_pct = float(t.get("hit_pct", 0))
+            status = "OK" if hit_pct >= 95 else "Warning" if hit_pct >= 80 else "Critical"
+            lines.append(f"| {t['table']} | {t['hit_pct']}% | {int(t['disk_reads']):,} | {status} |")
+        lines.append("")
+
+    # Table sizes
+    if result.table_sizes:
+        lines.append("## Table Sizes")
+        lines.append("")
+        lines.append("| Schema.Table | Total | Data | Indexes | Rows |")
+        lines.append("|--------------|-------|------|---------|------|")
+        for t in result.table_sizes[:10]:
+            schema = t.get('schema', 'public')
+            table = t.get('table', '')
+            full_name = f"{schema}.{table}" if schema != 'public' else table
+            data_bytes = int(t.get('data_bytes', 0))
+            index_bytes = int(t.get('index_bytes', 0))
+            data_mb = round(data_bytes / 1024 / 1024, 1)
+            index_mb = round(index_bytes / 1024 / 1024, 1)
+            row_count = t.get('row_count', '0')
+            lines.append(f"| {full_name} | {t['size']} | {data_mb}MB | {index_mb}MB | {row_count} |")
+        lines.append("")
+
+    # Vacuum health
+    if result.vacuum_health:
+        lines.append("## Vacuum Health")
+        lines.append("")
+        lines.append("| Schema.Table | Dead Rows | Dead % | V/AV Count | Last Analyze | XID Age | Flags |")
+        lines.append("|--------------|-----------|--------|------------|--------------|---------|-------|")
+        for t in result.vacuum_health[:10]:
+            schema = t.get('schema', 'public')
+            table = t.get('table', '')
+            vacuum_count = t.get('vacuum_count', '0')
+            autovacuum_count = t.get('autovacuum_count', '0')
+            last_analyze = t.get('last_analyze', 'never')
+            # Shorten timestamp to just date
+            if last_analyze and last_analyze != 'never' and len(last_analyze) > 10:
+                last_analyze = last_analyze[:10]
+            xid_age = t.get('xid_age', '0')
+            xid_millions = round(int(xid_age) / 1_000_000, 1) if xid_age.isdigit() else 0
+            flags = []
+            if t.get('needs_vacuum') == 'true':
+                flags.append('VACUUM')
+            if t.get('needs_freeze') == 'true':
+                flags.append('FREEZE')
+            flags_str = ', '.join(flags) if flags else '-'
+            full_name = f"{schema}.{table}" if schema != 'public' else table
+            lines.append(f"| {full_name} | {int(t['dead_rows']):,} | {t['dead_pct']}% | {vacuum_count}/{autovacuum_count} | {last_analyze} | {xid_millions}M | {flags_str} |")
+        lines.append("")
+
+    # Unused indexes
+    if result.unused_indexes:
+        lines.append("## Unused Indexes (0 scans since stats reset)")
+        lines.append("")
+        lines.append("| Schema.Table | Index | Size | Type | Table Idx Scans |")
+        lines.append("|--------------|-------|------|------|-----------------|")
+        for t in result.unused_indexes[:20]:
+            schema = t.get('schema', 'public')
+            table = t.get('table', '')
+            full_name = f"{schema}.{table}" if schema != 'public' else table
+            table_idx_scans = t.get('table_idx_scans', '0')
+            # Show index type
+            idx_type = "PK" if t.get('is_primary') else "UNIQUE" if t.get('is_unique') else "idx"
+            lines.append(f"| {full_name} | {t['index']} | {t['size']} | {idx_type} | {table_idx_scans} |")
+        lines.append("")
+
+    # Invalid indexes (failed concurrent index builds)
+    if result.invalid_indexes:
+        lines.append("## Invalid Indexes (require rebuild)")
+        lines.append("")
+        lines.append("| Schema | Table | Index |")
+        lines.append("|--------|-------|-------|")
+        for t in result.invalid_indexes:
+            lines.append(f"| {t.get('schema', '')} | {t.get('table', '')} | {t.get('index', '')} |")
+        lines.append("")
+
+    # Top queries
+    if result.top_queries:
+        lines.append("## Top Queries by Execution Time")
+        lines.append("")
+        lines.append("| Query | Calls | Total (min) | Mean (ms) | Cache Hit % | Temp R/W |")
+        lines.append("|-------|-------|-------------|-----------|-------------|----------|")
+        for t in result.top_queries[:10]:
+            query = t.get('query', '')[:40]
+            cache_pct = t.get('cache_hit_pct')
+            cache_str = f"{cache_pct}%" if cache_pct is not None else "-"
+            temp_r = t.get('temp_blks_read', 0)
+            temp_w = t.get('temp_blks_written', 0)
+            temp_str = f"{temp_r:,}/{temp_w:,}" if (temp_r or temp_w) else "-"
+            lines.append(f"| {query}... | {t.get('calls', '')} | {t.get('total_min', '')} | {t.get('mean_ms', '')} | {cache_str} | {temp_str} |")
+        lines.append("")
+
+    # Long-running queries
+    if result.long_running_queries:
+        lines.append("## Long-Running Queries (>5s)")
+        lines.append("")
+        lines.append("| PID | Duration (s) | Query |")
+        lines.append("|-----|--------------|-------|")
+        for q in result.long_running_queries:
+            lines.append(f"| {q.get('pid', '')} | {q.get('duration_sec', '')} | {q.get('query', '')[:40]}... |")
+        lines.append("")
+
+    # Idle in transaction (stuck transactions)
+    if result.idle_in_transaction:
+        lines.append("## Idle In Transaction (>30s)")
+        lines.append("")
+        lines.append("| PID | Idle (s) | User | App | Last Query |")
+        lines.append("|-----|----------|------|-----|------------|")
+        for txn in result.idle_in_transaction:
+            lines.append(f"| {txn.get('pid', '')} | {txn.get('idle_sec', '')} | {txn.get('user', '')} | {txn.get('app', '')[:15]} | {txn.get('last_query', '')[:30]}... |")
+        lines.append("")
+
+    # Blocked queries
+    if result.blocked_queries:
+        lines.append("## Blocked Queries (waiting on locks)")
+        lines.append("")
+        lines.append("| PID | Wait (s) | User | Blocked By | Query |")
+        lines.append("|-----|----------|------|------------|-------|")
+        for q in result.blocked_queries:
+            lines.append(f"| {q.get('pid', '')} | {q.get('wait_sec', '')} | {q.get('user', '')} | PID {q.get('blocking_pid', '')} | {q.get('query', '')[:30]}... |")
+        lines.append("")
+
+    # Lock contention
+    if result.locks:
+        lines.append("## Lock Contention")
+        lines.append("")
+        lines.append("| Lock Type | Mode | User | App | Query |")
+        lines.append("|-----------|------|------|-----|-------|")
+        for lock in result.locks:
+            lines.append(f"| {lock.get('locktype', '')} | {lock.get('mode', '')} | {lock.get('user', '')} | {lock.get('app', '')[:15]} | {lock.get('query', '')[:25]}... |")
+        lines.append("")
+
+    # Sequential scan patterns
+    if result.seq_scan_tables:
+        lines.append("## Tables with High Sequential Scans")
+        lines.append("")
+        lines.append("| Table | Seq Scans | Index Scans | Rows |")
+        lines.append("|-------|-----------|-------------|------|")
+        for t in result.seq_scan_tables[:10]:
+            lines.append(f"| {t.get('table', '')} | {t.get('seq_scans', '')} | {t.get('idx_scans', '')} | {t.get('rows', '')} |")
+        lines.append("")
+
+    # Replication
+    if result.replication:
+        lines.append("## Replication Status")
+        lines.append("")
+        lines.append("| Client | State | Sent LSN | Replay LSN |")
+        lines.append("|--------|-------|----------|------------|")
+        for r in result.replication:
+            lines.append(f"| {r.get('client', '')} | {r.get('state', '')} | {r.get('sent_lsn', '')} | {r.get('replay_lsn', '')} |")
+        lines.append("")
+
+    # HA Cluster
+    if result.ha_cluster:
+        lines.append("## HA Cluster (Patroni)")
+        lines.append("")
+        members = result.ha_cluster.get("members", [])
+        if members:
+            lines.append("| Name | Role | State | Timeline | Lag |")
+            lines.append("|------|------|-------|----------|-----|")
+            for m in members:
+                lag = m.get('lag', 0) or 0
+                lines.append(f"| {m.get('name', '')} | {m.get('role', '')} | {m.get('state', '')} | {m.get('timeline', '')} | {lag} |")
+        lines.append("")
+
+    # Cluster logs (for HA clusters) - raw output for LLM analysis
+    if result.cluster_logs:
+        lines.append("## Cluster Member Logs")
+        lines.append("")
+        lines.append("(Use --json for full log data. LLM will analyze patterns.)")
+        lines.append("")
+        for member_log in result.cluster_logs:
+            member = member_log.get('member', 'unknown')
+            status = member_log.get('status', 'unknown')
+            logs = member_log.get('logs', [])
+            lines.append(f"### {member} ({status}) - {len(logs)} log entries collected")
+            lines.append("")
+
+    # Background writer stats
+    if result.bgwriter:
+        lines.append("## Background Writer Stats")
+        lines.append("")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        bg = result.bgwriter
+        total_checkpoints = bg.get('checkpoints_timed', 0) + bg.get('checkpoints_req', 0)
+        timed_pct = round(100.0 * bg.get('checkpoints_timed', 0) / total_checkpoints, 1) if total_checkpoints > 0 else 0
+        lines.append(f"| Checkpoints (timed/requested) | {bg.get('checkpoints_timed', 0):,} / {bg.get('checkpoints_req', 0):,} ({timed_pct}% timed) |")
+        lines.append(f"| Buffers: checkpoint | {bg.get('buffers_checkpoint', 0):,} |")
+        lines.append(f"| Buffers: bgwriter clean | {bg.get('buffers_clean', 0):,} |")
+        lines.append(f"| Buffers: backend direct | {bg.get('buffers_backend', 0):,} |")
+        lines.append(f"| Buffers: backend fsync | {bg.get('buffers_backend_fsync', 0):,} |")
+        lines.append(f"| Max written clean | {bg.get('maxwritten_clean', 0):,} |")
+        stats_reset = bg.get('stats_reset', 'never')
+        if stats_reset and stats_reset != 'never' and len(stats_reset) > 10:
+            stats_reset = stats_reset[:10]
+        lines.append(f"| Stats reset | {stats_reset} |")
+        lines.append("")
+
+    # WAL archiver stats
+    if result.archiver:
+        arch = result.archiver
+        lines.append("## WAL Archiver Status")
+        lines.append("")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        lines.append(f"| Archived WAL count | {arch.get('archived_count', 0):,} |")
+        lines.append(f"| Failed archival count | {arch.get('failed_count', 0):,} |")
+        last_wal = arch.get('last_archived_wal') or 'none'
+        last_time = arch.get('last_archived_time', 'never')
+        if last_time and last_time != 'never' and len(last_time) > 19:
+            last_time = last_time[:19]
+        lines.append(f"| Last archived WAL | {last_wal} |")
+        lines.append(f"| Last archived time | {last_time} |")
+        if arch.get('failed_count', 0) > 0:
+            failed_wal = arch.get('last_failed_wal') or 'none'
+            failed_time = arch.get('last_failed_time', 'never')
+            if failed_time and failed_time != 'never' and len(failed_time) > 19:
+                failed_time = failed_time[:19]
+            lines.append(f"| Last failed WAL | {failed_wal} |")
+            lines.append(f"| Last failed time | {failed_time} |")
+        lines.append("")
+
+    # Vacuum progress (ongoing vacuums)
+    if result.progress_vacuum:
+        lines.append("## Ongoing Vacuum Operations")
+        lines.append("")
+        lines.append("| PID | Table | Phase | Progress |")
+        lines.append("|-----|-------|-------|----------|")
+        for vac in result.progress_vacuum:
+            total = vac.get('heap_blks_total', 0)
+            scanned = vac.get('heap_blks_scanned', 0)
+            pct = round(100.0 * scanned / total, 1) if total > 0 else 0
+            lines.append(f"| {vac.get('pid', '')} | {vac.get('relname', '')} | {vac.get('phase', '')} | {pct}% ({scanned:,}/{total:,} blks) |")
+        lines.append("")
+
+    # SSL connection stats
+    if result.ssl_stats:
+        ssl = result.ssl_stats
+        lines.append("## SSL Connection Stats")
+        lines.append("")
+        total = ssl.get('ssl_connections', 0) + ssl.get('non_ssl_connections', 0)
+        ssl_pct = round(100.0 * ssl.get('ssl_connections', 0) / total, 1) if total > 0 else 0
+        lines.append(f"- SSL connections: {ssl.get('ssl_connections', 0)} ({ssl_pct}%)")
+        lines.append(f"- Non-SSL connections: {ssl.get('non_ssl_connections', 0)}")
+        versions = ssl.get('ssl_versions', [])
+        if versions:
+            lines.append("- SSL versions in use:")
+            for v in versions:
+                lines.append(f"  - {v.get('version', 'unknown')}: {v.get('count', 0)} connections")
+        lines.append("")
+
+    # Recent errors
+    if result.recent_errors:
+        lines.append("## Recent Errors")
+        lines.append("")
+        for error in result.recent_errors[:5]:
+            lines.append(f"- {error[:100]}...")
+        lines.append("")
+
+    # Recommendations
+    if result.recommendations:
+        lines.append("## Recommendations")
+        lines.append("")
+        for i, rec in enumerate(result.recommendations, 1):
+            priority = rec["priority"].upper()
+            lines.append(f"{i}. **[{priority}]** {rec['issue']}")
+            lines.append(f"   - {rec['action']}")
+            lines.append("")
+
+    # Errors
+    if result.errors:
+        lines.append("## Errors")
+        lines.append("")
+        for error in result.errors:
+            lines.append(f"- {error}")
+        lines.append("")
+
+    lines.append("=" * 60)
+    lines.append("END OF REPORT")
+    lines.append("=" * 60)
+
+    return "\n".join(lines)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Complete database analysis for Railway services.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    parser.add_argument("--service", required=True, help="Service name")
+    parser.add_argument("--type", dest="db_type", required=True,
+                       choices=["postgres", "redis", "mysql", "mongodb"],
+                       help="Database type")
+    parser.add_argument("--json", action="store_true",
+                       help="Output as JSON")
+
+    args = parser.parse_args()
+
+    # Run analysis
+    if args.db_type == "postgres":
+        result = analyze_postgres(args.service)
+    else:
+        print(f"Error: {args.db_type} analysis not yet implemented", file=sys.stderr)
+        return 1
+
+    # Output
+    if args.json:
+        print(json.dumps(asdict(result), indent=2))
+    else:
+        print(format_report(result))
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

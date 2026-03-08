@@ -80,7 +80,12 @@ Omit `serviceId` and add `"groupBy": ["SERVICE_ID"]` to query all services in th
 
 ## Database inspection
 
-For database-level metrics and introspection (connection counts, replication status, slow queries, table sizes), SSH into the service and query the database directly. See [ssh.md](ssh.md).
+For database-level metrics and introspection (connection counts, replication status, slow queries, table sizes), SSH into the service and query the database directly. See [analyze-db.md](analyze-db.md) for comprehensive database analysis including:
+
+- Deep Postgres analysis (pg_stat_statements, vacuum health, index health, cache hit ratios)
+- HA cluster checks (Patroni, etcd, HAProxy)
+- Redis, MySQL, and MongoDB introspection
+- Combined analysis via `scripts/analyze-service.sh`
 
 ## Failure triage
 
