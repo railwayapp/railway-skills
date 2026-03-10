@@ -66,6 +66,7 @@ When editing this plugin:
 - Keep references action-oriented with reasoning. Explain why, not only what.
 - Keep CLI behavior claims aligned with Railway docs and CLI source.
 - Keep a single "Validated against" block at the end of each reference.
+- Bump `version` in `plugins/railway/.claude-plugin/plugin.json` in any PR that changes skill content. Claude Code uses this version to detect updates — without a bump, users will not receive changes.
 
 ## References
 
