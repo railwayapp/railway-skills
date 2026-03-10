@@ -14,7 +14,7 @@ You can also install via [skills.sh](https://skills.sh):
 npx skills add railwayapp/railway-skills
 ```
 
-Supports Claude Code, OpenAI Codex, OpenCode, and Cursor. Run the installer again to update.
+Supports Claude Code, OpenAI Codex, OpenCode, Cursor or any coding agent. Run the installer again to update.
 
 ### Claude Code plugin marketplace
 
