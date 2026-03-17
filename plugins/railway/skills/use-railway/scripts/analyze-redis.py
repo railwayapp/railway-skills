@@ -148,6 +148,8 @@ class RedisAnalysisResult:
     total_keys: int = 0
     command_stats: List[Dict[str, Any]] = field(default_factory=list)
     slowlog_len: Optional[int] = None
+    slowlog_entries: List[Dict[str, Any]] = field(default_factory=list)
+    big_keys: List[Dict[str, Any]] = field(default_factory=list)
 
     # Railway infrastructure
     metrics_history: Optional[Dict[str, Any]] = None
@@ -712,6 +714,128 @@ def extract_command_stats(info: Dict[str, str]) -> List[Dict[str, Any]]:
     return stats
 
 
+_CLIENT_IP_RE = re.compile(r'^(\[.+\]|(?:\d{1,3}\.){3}\d{1,3}):\d+$')
+
+
+def parse_slowlog_get(raw: str) -> List[Dict[str, Any]]:
+    """Parse SLOWLOG GET output into structured entries.
+
+    redis-cli --raw SLOWLOG GET format (Redis 4.0+):
+      <id>
+      <timestamp_unix>
+      <duration_us>
+      <cmd>
+      <arg1>
+      ...
+      <argN>
+      <client_ip:port>
+      [<client_name>]   (optional, may be absent)
+
+    There is no num_args field in the raw output. The client IP line
+    (IPv4 or IPv6 with port) marks the end of each entry's arguments.
+    """
+    entries: List[Dict[str, Any]] = []
+    lines = [l.strip() for l in raw.strip().splitlines() if l.strip()]
+    if not lines:
+        return entries
+
+    i = 0
+    while i < len(lines):
+        try:
+            entry_id = int(lines[i])
+        except (ValueError, IndexError):
+            i += 1
+            continue
+
+        if i + 3 >= len(lines):
+            break
+
+        try:
+            timestamp = int(lines[i + 1])
+            duration_us = int(lines[i + 2])
+        except (ValueError, IndexError):
+            i += 1
+            continue
+
+        # lines[i+3] is the command name; scan forward for client IP
+        cmd_start = i + 3
+        client_ip_pos = None
+        for k in range(cmd_start, min(cmd_start + 30, len(lines))):
+            if _CLIENT_IP_RE.match(lines[k]):
+                client_ip_pos = k
+                break
+
+        if client_ip_pos is not None:
+            cmd_parts = lines[cmd_start:client_ip_pos]
+            # Advance past client IP and optional client name
+            next_i = client_ip_pos + 1
+            if next_i < len(lines):
+                try:
+                    int(lines[next_i])
+                except ValueError:
+                    next_i += 1  # skip client name
+        else:
+            # No client IP found — take command + first arg only and advance
+            cmd_parts = lines[cmd_start:cmd_start + 2]
+            next_i = cmd_start + 2
+
+        command = " ".join(cmd_parts) if cmd_parts else "unknown"
+        if len(command) > 120:
+            command = command[:117] + "..."
+
+        entries.append({
+            "id": entry_id,
+            "timestamp_unix": timestamp,
+            "duration_us": duration_us,
+            "command": command,
+        })
+
+        i = next_i
+
+    return entries
+
+
+def parse_bigkeys(raw: str) -> List[Dict[str, Any]]:
+    """Parse redis-cli --bigkeys output into structured entries.
+
+    Looks for lines like:
+      Biggest string found 'cache:render:page/dashboard' has 2145832 bytes
+      Biggest hash found 'user:sessions' has 14291 fields
+      Biggest list found 'queue:notifications' has 8402 items
+      Biggest set found 'tags:all' has 291 members
+      Biggest zset found 'leaderboard:global' has 10042 members
+      Biggest stream found 'events:main' has 5012 entries
+    """
+    entries: List[Dict[str, Any]] = []
+    # Match: Biggest <type> found '<key>' has <count> <unit>
+    pattern = re.compile(
+        r"Biggest\s+(\w+)\s+found\s+'([^']+)'\s+has\s+([\d,]+)\s+(\w+)",
+        re.IGNORECASE,
+    )
+    for line in raw.splitlines():
+        m = pattern.search(line)
+        if m:
+            key_type = m.group(1).lower()
+            key_name = m.group(2)
+            size_str = m.group(3).replace(",", "")
+            unit = m.group(4).lower()
+            size = _safe_int(size_str)
+
+            # Format size for display
+            if unit == "bytes":
+                detail = _format_bytes_human(size)
+            else:
+                detail = f"{size:,} {unit}"
+
+            entries.append({
+                "type": key_type,
+                "key": key_name,
+                "size_or_count": size,
+                "detail": detail,
+            })
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
@@ -834,7 +958,7 @@ def generate_recommendations(result: RedisAnalysisResult) -> List[Dict[str, str]
     # Collection failures — surface critical issues when SSH/introspection failed
     if result.collection_status:
         failed = {k: v for k, v in result.collection_status.items() if v.get("status") == "failed"}
-        ssh_sources = {"redis_info", "slowlog"}
+        ssh_sources = {"redis_info", "slowlog", "slowlog_entries", "big_keys"}
         ssh_failed = {k: v for k, v in failed.items() if k in ssh_sources}
         if ssh_failed:
             sources = ", ".join(ssh_failed.keys())
@@ -924,12 +1048,42 @@ def generate_recommendations(result: RedisAnalysisResult) -> List[Dict[str, str]
                 "message": "Last RDB save failed. Check disk space and permissions.",
             })
 
-    # Slow log
-    if result.slowlog_len is not None and result.slowlog_len > 100:
+    # Slow log — data-driven when entries are available
+    if result.slowlog_entries:
+        # Analyze the actual slow commands
+        total_entries = len(result.slowlog_entries)
+        cmd_counts: Dict[str, int] = {}
+        total_duration = 0
+        for entry in result.slowlog_entries:
+            cmd = entry["command"].split()[0] if entry["command"] else "unknown"
+            cmd_counts[cmd] = cmd_counts.get(cmd, 0) + 1
+            total_duration += entry["duration_us"]
+        top_cmd = max(cmd_counts, key=cmd_counts.get) if cmd_counts else "unknown"
+        top_count = cmd_counts.get(top_cmd, 0)
+        avg_duration = total_duration / total_entries if total_entries > 0 else 0
+
+        msg = (f"Slow log contains {result.slowlog_len or total_entries} entries. "
+               f"Of the {total_entries} most recent: {top_count} are {top_cmd} commands "
+               f"averaging {_format_usec(avg_duration)}.")
+        if result.big_keys:
+            big_key_types = ", ".join(f"{bk['type']} ({bk['detail']})" for bk in result.big_keys[:3])
+            msg += f" Largest keys: {big_key_types} — check if these correlate with slow commands."
+        severity = "warning" if (result.slowlog_len or 0) > 100 else "info"
+        recs.append({"severity": severity, "category": "performance", "message": msg})
+    elif result.slowlog_len is not None and result.slowlog_len > 100:
         recs.append({
             "severity": "warning",
             "category": "performance",
-            "message": f"High number of slow log entries ({result.slowlog_len}). Review slow queries with SLOWLOG GET.",
+            "message": f"High number of slow log entries ({result.slowlog_len}). Slow log details could not be collected.",
+        })
+
+    # Big keys — standalone recommendation when no slowlog correlation
+    if result.big_keys and not result.slowlog_entries:
+        big_key_summary = "; ".join(f"{bk['key']} ({bk['type']}: {bk['detail']})" for bk in result.big_keys[:5])
+        recs.append({
+            "severity": "info",
+            "category": "performance",
+            "message": f"Largest keys by type: {big_key_summary}. Large keys can cause latency spikes on read/delete operations.",
         })
 
     return recs
@@ -1060,6 +1214,35 @@ def format_report(result: RedisAnalysisResult) -> str:
             )
         lines.append("")
 
+    # --- Slow Log Entries ---
+    if result.slowlog_entries:
+        lines.append("## Slow Log Entries (recent)")
+        lines.append("| # | Timestamp | Duration | Command |")
+        lines.append("|---|-----------|----------|---------|")
+        now_epoch = int(datetime.now(timezone.utc).timestamp())
+        for entry in result.slowlog_entries:
+            age = now_epoch - entry["timestamp_unix"]
+            lines.append(
+                f"| {entry['id']} "
+                f"| {_format_duration(age)} "
+                f"| {_format_usec(entry['duration_us'])} "
+                f"| {entry['command']} |"
+            )
+        lines.append("")
+
+    # --- Biggest Keys ---
+    if result.big_keys:
+        lines.append("## Biggest Keys")
+        lines.append("| Type | Key | Size/Count |")
+        lines.append("|------|-----|------------|")
+        for bk in result.big_keys:
+            lines.append(
+                f"| {bk['type']} "
+                f"| {bk['key']} "
+                f"| {bk['detail']} |"
+            )
+        lines.append("")
+
     # --- Keyspace ---
     if result.keyspace:
         lines.append("## Keyspace")
@@ -1134,8 +1317,8 @@ def analyze_redis(service: str, timeout: int = 300, quiet: bool = False,
                   service_id: Optional[str] = None) -> RedisAnalysisResult:
     """Run complete Redis analysis with maximum data collection.
 
-    Collects Redis INFO ALL, SLOWLOG LEN, Railway metrics, and logs
-    in parallel where possible.
+    Collects Redis INFO ALL, SLOWLOG LEN, SLOWLOG GET 20, --bigkeys,
+    Railway metrics, and logs in parallel where possible.
 
     Args:
         skip_logs: Skip log fetching for faster analysis
@@ -1196,7 +1379,7 @@ def analyze_redis(service: str, timeout: int = 300, quiet: bool = False,
                 print(f"        SSH attempt {attempt}/{len(ssh_attempts)} failed ({ssh_stderr or 'no response'}), giving up", file=sys.stderr, flush=True)
 
     # === PARALLEL EXECUTION ===
-    progress(3, 5, "Running analysis (Redis INFO, metrics, logs in parallel)...", quiet)
+    progress(3, 5, "Running analysis (Redis INFO, slowlog, bigkeys, metrics, logs in parallel)...", quiet)
 
     def task_redis_info():
         """Fetch Redis INFO ALL via SSH."""
@@ -1223,6 +1406,26 @@ def analyze_redis(service: str, timeout: int = 300, quiet: bool = False,
             return ("ok", "", stdout.strip())
         return ("failed", stderr or "empty response", "")
 
+    def task_slowlog_get():
+        """Fetch Redis SLOWLOG GET 20 via SSH for actual slow query details."""
+        if not ssh_available:
+            return ("failed", f"SSH not available: {ssh_stderr or 'connection failed'}", "")
+        command = 'timeout 30s redis-cli -h localhost -p 6379 -a "$REDISPASSWORD" --no-auth-warning --raw SLOWLOG GET 20'
+        code, stdout, stderr = run_ssh_query(service, command, timeout=45)
+        if code == 0 and stdout.strip():
+            return ("ok", "", stdout.strip())
+        return ("failed", stderr or "empty response", "")
+
+    def task_bigkeys():
+        """Fetch redis-cli --bigkeys via SSH (SCAN-based, may take longer)."""
+        if not ssh_available:
+            return ("failed", f"SSH not available: {ssh_stderr or 'connection failed'}", "")
+        command = 'timeout 60s redis-cli -h localhost -p 6379 -a "$REDISPASSWORD" --no-auth-warning --bigkeys'
+        code, stdout, stderr = run_ssh_query(service, command, timeout=75)
+        if code == 0 and stdout.strip():
+            return ("ok", "", stdout.strip())
+        return ("failed", stderr or "empty response", "")
+
     def task_metrics():
         """Fetch all metrics (disk, CPU, memory) in one API call."""
         if environment_id and service_id:
@@ -1237,15 +1440,19 @@ def analyze_redis(service: str, timeout: int = 300, quiet: bool = False,
                                environment_id=environment_id,
                                service_id=service_id)
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         future_info = executor.submit(task_redis_info)
         future_slowlog = executor.submit(task_slowlog)
+        future_slowlog_get = executor.submit(task_slowlog_get)
+        future_bigkeys = executor.submit(task_bigkeys)
         future_metrics = executor.submit(task_metrics)
         future_logs = executor.submit(task_logs)
 
         # Collect results
         info_result = future_info.result()
         slowlog_result = future_slowlog.result()
+        slowlog_get_result = future_slowlog_get.result()
+        bigkeys_result = future_bigkeys.result()
         metrics_result = future_metrics.result()
         logs_result = future_logs.result()
 
@@ -1276,6 +1483,22 @@ def analyze_redis(service: str, timeout: int = 300, quiet: bool = False,
         result.slowlog_len = _safe_int(sl_raw)
     else:
         result.collection_status["slowlog"] = {"status": "failed", "error": sl_error}
+
+    # SLOWLOG GET 20
+    slg_status, slg_error, slg_raw = slowlog_get_result
+    if slg_status == "ok" and slg_raw:
+        result.collection_status["slowlog_entries"] = {"status": "ok"}
+        result.slowlog_entries = parse_slowlog_get(slg_raw)
+    else:
+        result.collection_status["slowlog_entries"] = {"status": "failed", "error": slg_error}
+
+    # Big keys
+    bk_status, bk_error, bk_raw = bigkeys_result
+    if bk_status == "ok" and bk_raw:
+        result.collection_status["big_keys"] = {"status": "ok"}
+        result.big_keys = parse_bigkeys(bk_raw)
+    else:
+        result.collection_status["big_keys"] = {"status": "failed", "error": bk_error}
 
     # Metrics
     if metrics_result:

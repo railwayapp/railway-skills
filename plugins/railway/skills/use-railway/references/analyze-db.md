@@ -41,6 +41,16 @@ Then match the image to the database type:
 | `redis*`, `ghcr.io/railway/redis*`, `railwayapp/redis*` | Redis |
 | `mongo*`, `ghcr.io/railway/mongo*` | MongoDB |
 
+**If `environmentId` is empty in the URL** (e.g., `?environmentId=` or no query param at all), skip the `environment.config` query — it requires a valid ID. Instead, list the project's environments:
+
+```bash
+scripts/railway-api.sh \
+  'query getEnvs($id: String!) { project(id: $id) { environments { edges { node { id name } } } } }' \
+  '{"id": "<PROJECT_ID>"}'
+```
+
+Use the `production` environment by default. If multiple non-PR environments exist and the user hasn't specified one, ask which environment to analyze.
+
 If no URL is provided and you must discover context, then `railway status --json` is acceptable as a fallback.
 
 ## Database Type Detection and Script Selection

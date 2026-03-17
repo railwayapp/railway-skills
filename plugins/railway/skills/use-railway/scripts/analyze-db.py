@@ -168,7 +168,7 @@ class AnalysisResult:
     cluster_logs: List[Dict[str, Any]] = field(default_factory=list)
     recent_logs: List[str] = field(default_factory=list)  # Raw unfiltered logs for LLM analysis
     recent_errors: List[str] = field(default_factory=list)  # Legacy: filtered error logs
-    metrics_history: Optional[Dict[str, Any]] = None  # 24h time series + trend analysis for CPU, memory, disk, network
+    metrics_history: Optional[Dict[str, Any]] = None  # Multi-window time series + trend analysis for CPU, memory, disk, network
     collection_status: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # Status of each data source
     errors: List[str] = field(default_factory=list)
     recommendations: List[Dict[str, str]] = field(default_factory=list)
@@ -1316,14 +1316,105 @@ def get_all_metrics_from_api(environment_id: str, service_id: str, hours: int = 
     return None
 
 
-def _build_metrics_history(raw_series: Dict[str, List[Dict[str, Any]]], hours: int = 24) -> Dict[str, Any]:
-    """Build time-series history with trend analysis from raw API data.
+def _analyze_window(values: List[Dict[str, Any]], nums: List[float], d: int,
+                    unit: str) -> Dict[str, Any]:
+    """Analyze a single time window of metric data.
 
-    Returns a dict with per-metric summaries, time series, and trend analysis.
+    Returns summary stats, trend, spike detection, and downsampled series.
+    """
+    if not nums:
+        return {}
+
+    avg_val = sum(nums) / len(nums)
+    min_val = min(nums)
+    max_val = max(nums)
+
+    entry: Dict[str, Any] = {
+        "unit": unit,
+        "current": round(nums[-1], d),
+        "min": round(min_val, d),
+        "max": round(max_val, d),
+        "avg": round(avg_val, d),
+        "samples": len(nums),
+    }
+
+    # Trend: compare first quarter avg to last quarter avg
+    q_size = max(len(nums) // 4, 1)
+    first_q = nums[:q_size]
+    last_q = nums[-q_size:]
+    first_avg = sum(first_q) / len(first_q)
+    last_avg = sum(last_q) / len(last_q)
+
+    if first_avg > 0:
+        change_pct = round(((last_avg - first_avg) / first_avg) * 100, 1)
+    elif last_avg > 0:
+        change_pct = 100.0
+    else:
+        change_pct = 0.0
+
+    if change_pct > 10:
+        trend_dir = "increasing"
+    elif change_pct < -10:
+        trend_dir = "decreasing"
+    else:
+        trend_dir = "stable"
+
+    entry["trend"] = {
+        "direction": trend_dir,
+        "change_pct": change_pct,
+        "first_quarter_avg": round(first_avg, d),
+        "last_quarter_avg": round(last_avg, d),
+    }
+
+    # Spike detection
+    if len(nums) >= 10:
+        variance = sum((x - avg_val) ** 2 for x in nums) / len(nums)
+        stddev = variance ** 0.5
+        threshold = avg_val + 2 * stddev
+        if stddev > 0 and threshold > 0:
+            spikes = []
+            for v in values:
+                val = v.get("value")
+                if val is not None and val > threshold:
+                    spikes.append({"ts": v["ts"], "value": round(val, d)})
+            if spikes:
+                entry["spikes"] = {
+                    "count": len(spikes),
+                    "threshold": round(threshold, d),
+                    "peaks": spikes[:10],
+                }
+
+    # Compact time series: downsample to ~48 points
+    series_points = []
+    for v in values:
+        ts = v.get("ts")
+        val = v.get("value")
+        if ts is not None and val is not None:
+            series_points.append({"ts": ts, "value": round(val, d)})
+
+    if len(series_points) > 48:
+        step = len(series_points) / 48
+        downsampled = []
+        for i in range(48):
+            idx = int(i * step)
+            downsampled.append(series_points[idx])
+        downsampled.append(series_points[-1])
+        entry["series"] = downsampled
+    else:
+        entry["series"] = series_points
+
+    return entry
+
+
+def _build_metrics_history(raw_series: Dict[str, List[Dict[str, Any]]], hours: int = 168) -> Dict[str, Any]:
+    """Build multi-window time-series history with trend analysis.
+
+    Always produces a full-window analysis. If the window is > 24h, also
+    produces a 24h short-window analysis from the tail of the data so the
+    LLM can compare long-term vs short-term trends.
     """
     from datetime import timedelta
 
-    # Friendly names and units
     metric_info = {
         "CPU_USAGE": {"name": "cpu", "unit": "vCPU", "decimals": 2},
         "MEMORY_USAGE_GB": {"name": "memory", "unit": "GB", "decimals": 2},
@@ -1334,10 +1425,14 @@ def _build_metrics_history(raw_series: Dict[str, List[Dict[str, Any]]], hours: i
         "NETWORK_TX_GB": {"name": "network_tx", "unit": "GB", "decimals": 3},
     }
 
-    history: Dict[str, Any] = {
-        "window_hours": hours,
-        "metrics": {},
-    }
+    # Determine the 24h cutoff timestamp
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    cutoff_24h = now_ts - (24 * 3600)
+
+    produce_short_window = hours > 24
+
+    full_window: Dict[str, Any] = {}
+    short_window: Dict[str, Any] = {}
 
     for measurement, values in raw_series.items():
         info = metric_info.get(measurement)
@@ -1350,103 +1445,40 @@ def _build_metrics_history(raw_series: Dict[str, List[Dict[str, Any]]], hours: i
 
         d = info["decimals"]
         name = info["name"]
-        avg_val = sum(nums) / len(nums)
-        min_val = min(nums)
-        max_val = max(nums)
 
-        # Summary stats
-        entry: Dict[str, Any] = {
-            "unit": info["unit"],
-            "current": round(nums[-1], d),
-            "min": round(min_val, d),
-            "max": round(max_val, d),
-            "avg": round(avg_val, d),
-            "samples": len(nums),
+        # Full window analysis
+        full_window[name] = _analyze_window(values, nums, d, info["unit"])
+
+        # Short window (last 24h) analysis
+        if produce_short_window:
+            recent_values = [v for v in values if v.get("ts", 0) >= cutoff_24h]
+            recent_nums = [v["value"] for v in recent_values if v.get("value") is not None]
+            if len(recent_nums) >= 2:
+                short_window[name] = _analyze_window(recent_values, recent_nums, d, info["unit"])
+
+    # Build the result with named windows
+    windows: Dict[str, Any] = {}
+
+    # Label the full window
+    if hours >= 168:
+        full_label = "7d"
+    elif hours >= 72:
+        full_label = f"{hours // 24}d"
+    else:
+        full_label = f"{hours}h"
+
+    windows[full_label] = {
+        "window_hours": hours,
+        "metrics": full_window,
+    }
+
+    if produce_short_window and short_window:
+        windows["24h"] = {
+            "window_hours": 24,
+            "metrics": short_window,
         }
 
-        # Trend: compare first quarter avg to last quarter avg
-        q_size = max(len(nums) // 4, 1)
-        first_q = nums[:q_size]
-        last_q = nums[-q_size:]
-        first_avg = sum(first_q) / len(first_q)
-        last_avg = sum(last_q) / len(last_q)
-
-        if first_avg > 0:
-            change_pct = round(((last_avg - first_avg) / first_avg) * 100, 1)
-        elif last_avg > 0:
-            change_pct = 100.0
-        else:
-            change_pct = 0.0
-
-        if change_pct > 10:
-            trend_dir = "increasing"
-        elif change_pct < -10:
-            trend_dir = "decreasing"
-        else:
-            trend_dir = "stable"
-
-        entry["trend"] = {
-            "direction": trend_dir,
-            "change_pct": change_pct,
-            "first_quarter_avg": round(first_avg, d),
-            "last_quarter_avg": round(last_avg, d),
-        }
-
-        # Spike detection: values > avg + 2*stddev
-        if len(nums) >= 10:
-            variance = sum((x - avg_val) ** 2 for x in nums) / len(nums)
-            stddev = variance ** 0.5
-            threshold = avg_val + 2 * stddev
-            if stddev > 0 and threshold > 0:
-                spikes = []
-                for v in values:
-                    val = v.get("value")
-                    if val is not None and val > threshold:
-                        spikes.append({"ts": v["ts"], "value": round(val, d)})
-                if spikes:
-                    entry["spikes"] = {
-                        "count": len(spikes),
-                        "threshold": round(threshold, d),
-                        "peaks": spikes[:10],  # Top 10 spike timestamps
-                    }
-
-        # Compact time series: downsample to ~48 points (30-min buckets) for JSON output
-        series_points = []
-        for v in values:
-            ts = v.get("ts")
-            val = v.get("value")
-            if ts is not None and val is not None:
-                series_points.append({"ts": ts, "value": round(val, d)})
-
-        if len(series_points) > 48:
-            # Downsample by picking evenly spaced points
-            step = len(series_points) / 48
-            downsampled = []
-            for i in range(48):
-                idx = int(i * step)
-                downsampled.append(series_points[idx])
-            # Always include the last point
-            downsampled.append(series_points[-1])
-            entry["series"] = downsampled
-        else:
-            entry["series"] = series_points
-
-        history["metrics"][name] = entry
-
-    # Cross-metric utilization percentages
-    m = history["metrics"]
-    if "memory" in m and "memory_limit" in m:
-        limit = m["memory_limit"]["current"]
-        if limit > 0:
-            m["memory"]["utilization_pct"] = round((m["memory"]["current"] / limit) * 100, 1)
-            m["memory"]["max_utilization_pct"] = round((m["memory"]["max"] / limit) * 100, 1)
-    if "cpu" in m and "cpu_limit" in m:
-        limit = m["cpu_limit"]["current"]
-        if limit > 0:
-            m["cpu"]["utilization_pct"] = round((m["cpu"]["current"] / limit) * 100, 1)
-            m["cpu"]["max_utilization_pct"] = round((m["cpu"]["max"] / limit) * 100, 1)
-
-    return history
+    return {"windows": windows}
 
 
 def get_recent_logs(service: str, lines: int = LOG_LINES_DEFAULT,
@@ -1664,7 +1696,7 @@ def is_postgres_ha_service(service_id: Optional[str]) -> bool:
 
 def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
                      skip_logs: bool = False,
-                     metrics_hours: int = 24,
+                     metrics_hours: int = 168,
                      project_id: Optional[str] = None,
                      environment_id: Optional[str] = None,
                      service_id: Optional[str] = None) -> AnalysisResult:
@@ -1675,7 +1707,7 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
 
     Args:
         skip_logs: Skip log fetching for faster analysis (~60s saved)
-        metrics_hours: Hours of metrics history to fetch (default: 24, max: 168)
+        metrics_hours: Hours of metrics history to fetch (default: 168, max: 168)
         project_id: Project ID (bypasses railway link config)
         environment_id: Environment ID (bypasses railway link config)
         service_id: Service ID (bypasses railway link config)
@@ -2792,18 +2824,24 @@ def sum_index_sizes(indexes: List[Dict[str, Any]]) -> str:
 
 def _trend_indicator(metrics_history: Optional[Dict[str, Any]], metric_name: str) -> str:
     """Return a compact trend string like ' (^ +15.2% 24h)' for use in summary rows."""
-    if not metrics_history or not metrics_history.get("metrics"):
+    if not metrics_history:
         return ""
-    m = metrics_history["metrics"].get(metric_name)
+    # Multi-window format: pick the shortest window (prefer 24h)
+    windows = metrics_history.get("windows", {})
+    window_data = windows.get("24h") or next(iter(windows.values()), None) if windows else None
+    if not window_data or not window_data.get("metrics"):
+        return ""
+    m = window_data["metrics"].get(metric_name)
     if not m or "trend" not in m:
         return ""
     t = m["trend"]
     direction = t.get("direction", "stable")
     change = t.get("change_pct", 0)
+    window_label = "24h" if "24h" in windows else next(iter(windows), "")
     arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "")
     if direction == "stable":
-        return f" ({arrow} stable 24h)"
-    return f" ({arrow} {change:+.1f}% 24h)"
+        return f" ({arrow} stable {window_label})"
+    return f" ({arrow} {change:+.1f}% {window_label})"
 
 
 def format_report(result: AnalysisResult) -> str:
@@ -2992,39 +3030,40 @@ def format_report(result: AnalysisResult) -> str:
 
     lines.append("")
 
-    # Infrastructure Trends (24h)
-    if result.metrics_history and result.metrics_history.get("metrics"):
-        lines.append("## Infrastructure Trends (24h)")
-        lines.append("")
-        lines.append("| Metric | Current | Min | Max | Avg | Trend | Change |")
-        lines.append("|--------|---------|-----|-----|-----|-------|--------|")
-        display_order = [
-            ("cpu", "CPU"),
-            ("memory", "Memory"),
-            ("disk", "Disk"),
-            ("network_rx", "Network RX"),
-            ("network_tx", "Network TX"),
-        ]
-        mh = result.metrics_history["metrics"]
-        for key, label in display_order:
-            if key in mh:
-                m = mh[key]
-                unit = m["unit"]
-                trend = m.get("trend", {})
-                direction = trend.get("direction", "?")
-                change = trend.get("change_pct", 0)
-                arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "?")
-                spike_note = ""
-                if m.get("spikes"):
-                    spike_note = f" ({m['spikes']['count']} spikes)"
-                util_note = ""
-                if m.get("max_utilization_pct"):
-                    util_note = f" (peak {m['max_utilization_pct']}% util)"
-                lines.append(
-                    f"| {label} | {m['current']} {unit} | {m['min']} | {m['max']} | {m['avg']} | "
-                    f"{arrow} {direction} | {change:+.1f}%{spike_note}{util_note} |"
-                )
-        lines.append("")
+    # Infrastructure Trends (multi-window)
+    if result.metrics_history and result.metrics_history.get("windows"):
+        windows = result.metrics_history.get("windows", {})
+        for window_label, window_data in windows.items():
+            mh = window_data.get("metrics", {})
+            if not mh:
+                continue
+            lines.append(f"## Infrastructure Trends ({window_label})")
+            lines.append("")
+            lines.append("| Metric | Current | Min | Max | Avg | Trend | Change |")
+            lines.append("|--------|---------|-----|-----|-----|-------|--------|")
+            display_order = [
+                ("cpu", "CPU"),
+                ("memory", "Memory"),
+                ("disk", "Disk"),
+                ("network_rx", "Network RX"),
+                ("network_tx", "Network TX"),
+            ]
+            for key, label in display_order:
+                if key in mh:
+                    m = mh[key]
+                    unit = m["unit"]
+                    trend = m.get("trend", {})
+                    direction = trend.get("direction", "?")
+                    change = trend.get("change_pct", 0)
+                    arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "?")
+                    spike_note = ""
+                    if m.get("spikes"):
+                        spike_note = f" ({m['spikes']['count']} spikes)"
+                    lines.append(
+                        f"| {label} | {m['current']} {unit} | {m['min']} | {m['max']} | {m['avg']} | "
+                        f"{arrow} {direction} | {change:+.1f}%{spike_note} |"
+                    )
+            lines.append("")
 
     # PostgreSQL Configuration (tuning parameters)
     if result.memory_config:
@@ -3478,8 +3517,8 @@ def main():
                        help="Suppress progress messages")
     parser.add_argument("--skip-logs", action="store_true",
                        help="Skip log fetching for faster analysis")
-    parser.add_argument("--metrics-hours", type=int, default=24,
-                       help="Hours of metrics history to fetch (default: 24, max: 168)")
+    parser.add_argument("--metrics-hours", type=int, default=168,
+                       help="Hours of metrics history to fetch (default: 168, max: 168)")
     parser.add_argument("--step", choices=["ssh-test", "query", "logs", "metrics"],
                        help="Run a single collection step for debugging")
     parser.add_argument("--project-id", help="Project ID (bypasses railway link)")
