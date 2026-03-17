@@ -58,10 +58,13 @@ Before any mutation, verify context:
 command -v railway                # CLI installed
 railway whoami --json             # authenticated
 railway --version                 # check CLI version
-railway status --json             # linked project/environment/service
 ```
 
-If the CLI is missing, guide the user to install it. 
+**Context resolution — URL IDs always win:**
+- If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.
+- If no URL is given, fall back to `railway status --json` for the linked project/environment/service.
+
+If the CLI is missing, guide the user to install it.
 
 ```bash
 bash <(curl -fsSL cli.new) # Shell script (macOS, Linux, Windows via WSL)
@@ -69,7 +72,7 @@ brew install railway # Homebrew (macOS)
 npm i -g @railway/cli # npm (macOS, Linux, Windows). Requires Node.js version 16 or higher.
 ```
 
-If not authenticated, run `railway login`. If not linked, run `railway link --project <id-or-name>`.
+If not authenticated, run `railway login`. If not linked and no URL was provided, run `railway link --project <id-or-name>`.
 
 If a command is not recognized (for example, `railway environment edit`), the CLI may be outdated. Upgrade with:
 
@@ -105,7 +108,7 @@ For anything beyond quick operations, load the reference that matches the user's
 | Ship code or manage releases | [deploy.md](references/deploy.md) | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
 | Change configuration | [configure.md](references/configure.md) | Environments, variables, config patches, domains, networking |
 | Check health or debug failures | [operate.md](references/operate.md) | Status, logs, metrics, build/runtime triage, recovery |
-| Analyze databases | [analyze-db.md](references/analyze-db.md) | SSH access, database introspection, deep Postgres analysis, HA cluster checks, combined database analysis |
+| Analyze databases | [analyze-db.md](references/analyze-db.md) + DB-specific ref | SSH access, database introspection. Load analyze-db.md first, then the DB-specific reference: [analyze-db-postgres.md](references/analyze-db-postgres.md), [analyze-db-mysql.md](references/analyze-db-mysql.md), [analyze-db-redis.md](references/analyze-db-redis.md), or [analyze-db-mongo.md](references/analyze-db-mongo.md) |
 | Request from API, docs, or community | [request.md](references/request.md) | Railway GraphQL API queries/mutations, metrics queries, Central Station, official docs |
 
 If the request spans two areas (for example, "deploy and then check if it's healthy"), load both references and compose one response.

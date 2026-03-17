@@ -6,6 +6,70 @@ You are a database performance expert. The script collects raw data - your job i
 
 **Don't just report metrics. Analyze them.**
 
+## Context: URL First, Never Trust CLI Linking
+
+When a Railway URL is provided, **extract IDs directly from the URL**. Do NOT run `railway status --json` to discover context — it returns whatever project is locally linked, which is usually a different project.
+
+```
+https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>?environmentId=<ENV_ID>
+https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>/database?environmentId=<ENV_ID>
+```
+
+With the project, service, and environment IDs from the URL, query the API for the service name and database type in a **single call**:
+
+```bash
+scripts/railway-api.sh \
+  'query getServiceAndConfig($serviceId: String!, $environmentId: String!) {
+    service(id: $serviceId) { name }
+    environment(id: $environmentId) {
+      config(decryptVariables: false)
+    }
+  }' \
+  '{"serviceId": "<SERVICE_ID>", "environmentId": "<ENV_ID>"}'
+```
+
+From the response, get:
+- **Service name**: `data.service.name`
+- **Database image**: `data.environment.config.services.<SERVICE_ID>.source.image`
+
+Then match the image to the database type:
+
+| Image pattern | Database Type |
+|--------------|---------------|
+| `postgres*`, `ghcr.io/railway/postgres*` | PostgreSQL |
+| `mysql*`, `ghcr.io/railway/mysql*` | MySQL |
+| `redis*`, `ghcr.io/railway/redis*`, `railwayapp/redis*` | Redis |
+| `mongo*`, `ghcr.io/railway/mongo*` | MongoDB |
+
+If no URL is provided and you must discover context, then `railway status --json` is acceptable as a fallback.
+
+## Database Type Detection and Script Selection
+
+| Database Type | Script |
+|---------------|--------|
+| PostgreSQL | `scripts/analyze-db.py --type postgres` |
+| MySQL | `scripts/analyze-mysql.py --type mysql` |
+| Redis | `scripts/analyze-redis.py --type redis` |
+| MongoDB | `scripts/analyze-mongo.py --type mongo` |
+
+**All scripts share the same CLI interface:**
+```bash
+python3 scripts/analyze-<type>.py \
+  --service <name> \
+  --type <type> \
+  --json \
+  --project-id <project-id> \
+  --environment-id <env-id> \
+  --service-id <service-id>
+```
+
+Common options across all scripts:
+- `--json` — JSON output for programmatic processing
+- `--quiet` — Suppress progress messages
+- `--skip-logs` — Skip log collection
+- `--metrics-hours <N>` — Hours of metrics history (default: 24, max: 168)
+- `--step <step>` — Debug individual collection steps (ssh-test, query, logs, metrics)
+
 ## Before You Analyze: Check Collection Status
 
 **ALWAYS check `collection_status` and `errors[]` FIRST before interpreting any data.** The script collects data from multiple independent sources. Any of them can fail.
@@ -318,25 +382,27 @@ Pass project, environment, and service IDs directly — no `railway link` needed
 
 ```bash
 # From plugins/railway/skills/use-railway directory:
-python3 scripts/analyze-db.py \
+python3 scripts/analyze-<type>.py \
   --service <name> \
-  --type postgres \
+  --type <type> \
   --json \
   --project-id <project-id> \
   --environment-id <env-id> \
   --service-id <service-id>
 ```
 
+All three IDs come from the URL (see "Context: URL First" above). The service name comes from the API query.
+
+**Options:**
+- `--metrics-hours <N>` — Hours of metrics history to fetch (default: 24, max: 168). Use `--metrics-hours 168` for 7-day trends, `--metrics-hours 1` for recent snapshot.
+
+**SSH retry:** The script automatically retries SSH connectivity up to 3 times with increasing timeouts (30s, 60s, 90s). If the database query itself fails after SSH connects, it retries once. Progress is logged to stderr.
+
 **Output:** Progress messages go to stderr. JSON results go to stdout. Do not redirect or pipe stderr — just run the command as-is and read the full output.
 
-### Resolving IDs from a Railway URL
+### Resolving environment by name
 
-Users often paste dashboard URLs like:
-```
-https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>
-```
-
-The URL gives you `projectId` and `serviceId`. If the user specifies an environment by name (e.g., "production"), resolve it to an ID:
+If the URL has no `environmentId` and the user specifies an environment by name (e.g., "production"), resolve it:
 
 ```bash
 scripts/railway-api.sh \
@@ -348,12 +414,12 @@ scripts/railway-api.sh \
   '{"id": "<PROJECT_ID>"}'
 ```
 
-Match the environment name (case-insensitive) to get the `environmentId`, then pass all three IDs to the script.
+Match the environment name (case-insensitive) to get the `environmentId`.
 
 ### Debugging individual steps
 
 ```bash
-python3 scripts/analyze-db.py --service <name> --type postgres \
+python3 scripts/analyze-<type>.py --service <name> --type <type> \
   --project-id <pid> --environment-id <eid> --service-id <sid> \
   --step ssh-test    # Test SSH connectivity
   --step query       # Run only the database query
@@ -361,265 +427,60 @@ python3 scripts/analyze-db.py --service <name> --type postgres \
   --step logs        # Fetch only logs
 ```
 
-## What the Script Collects
+## Database-Specific References
 
-**`collection_status`** — check this FIRST. Shows what succeeded vs failed:
-- `database_query`: SSH → psql batched query (connections, cache, vacuum, queries, etc.)
-- `metrics_api`: Railway API for disk, CPU, memory
-- `logs_api`: Railway API for recent log lines
-- `ha_cluster`: SSH → Patroni REST API (HA services only)
+After running the script and checking collection status, load the reference for the specific database type:
 
-Each entry has `"status"` (`"success"`, `"error"`, or `"skipped"`) and optional `"error"` or `"reason"` fields.
+| Database | Reference | What It Covers |
+|----------|-----------|----------------|
+| PostgreSQL | [analyze-db-postgres.md](analyze-db-postgres.md) | What psql collects, log analysis checklist, tuning formulas, vacuum priority, pg_stat_statements, applying fixes |
+| MySQL | [analyze-db-mysql.md](analyze-db-mysql.md) | All 12 metric sections (overview, query throughput, InnoDB, efficiency, buffer pool, I/O, network, locks, cache, top queries, tables, active queries), patterns, tuning |
+| Redis | [analyze-db-redis.md](analyze-db-redis.md) | INFO ALL metrics, memory fragmentation, cache thrashing, persistence, command stats |
+| MongoDB | [analyze-db-mongo.md](analyze-db-mongo.md) | serverStatus, WiredTiger cache, query efficiency, connection saturation, oplog |
 
-All in ONE operation (no additional queries needed):
+**Always load the DB-specific reference** — it contains the metric sections, thresholds, and tuning knowledge needed for proper analysis.
 
-**Connections:**
-- Current/max/available counts
-- States (active, idle, idle_in_transaction)
-- By application name
-- By age (buckets: <1min, 1-5min, 5-30min, 30min-1hr, 1-24hr, >24hr)
-- Oldest connection age
+## Infrastructure Metrics (All Database Types)
 
-**Memory & Configuration:**
-- shared_buffers, effective_cache_size, work_mem, maintenance_work_mem
-- WAL settings, parallelism settings, planner settings
-- Autovacuum status
-- track_activity_query_size (tells you if queries are truncated in pg_stat_statements)
-- log_min_duration_statement (tells you if slow query logging is enabled and at what threshold)
-- idle_in_transaction_session_timeout, statement_timeout (safety timeouts)
-- track_io_timing (needed for blk_read_time/blk_write_time in query stats)
+All scripts collect the same infrastructure metrics via Railway API:
 
-**Cache Performance:**
-- Overall table/index hit ratios
-- Per-table: hit %, disk reads, size (this is key for diagnosis)
+**Metrics History (`metrics_history`):**
+The script fetches **7 days** (168 hours) of time-series data from Railway's metrics API by default and produces **two analysis windows**:
 
-**Storage:**
-- Database size, WAL size
-- Per-table: total size, data size, index size, row count
-
-**Vacuum Health:**
-- Per-table: dead rows, dead %, vacuum count, last vacuum/analyze, XID age
-- Flags: needs_vacuum, needs_freeze
-
-**Indexes:**
-- Unused indexes (0 scans) with sizes
-- Invalid indexes (failed builds)
-
-**Query Performance (if pg_stat_statements enabled):**
-- Top 100 queries by total execution time
-- Per-query execution: calls, total_min, mean_ms, min_ms, max_ms, stddev_ms
-- Per-query rows: total rows, rows_per_call
-- Per-query planning: total_plan_ms, mean_plan_ms
-- Per-query cache: shared_blks_hit, shared_blks_read, shared_blks_dirtied, shared_blks_written, cache_hit_pct
-- Per-query temp: temp_blks_read, temp_blks_written
-- Per-query I/O timing: blk_read_time_ms, blk_write_time_ms (requires track_io_timing=on)
-- Per-query WAL: wal_records, wal_bytes
-- Per-query local blocks: local_blks_hit, local_blks_read (for temp tables)
-- Temp file stats (cumulative since stats reset, NOT current disk usage)
-
-**Logs & Active Issues:**
-- `recent_logs`: Raw unfiltered logs (1000 lines) - parse these yourself, look for errors, warnings, patterns
-- `recent_errors`: Filtered error-level logs (legacy, for quick reference)
-- `long_running_queries`: Queries running >5s at time of collection
-- `blocked_queries`: Queries waiting on locks
-- `cluster_logs`: HA cluster events (Patroni)
-
-**Important:** Always analyze the raw `recent_logs` array thoroughly. This is 1000 lines of unfiltered database output — treat it as a goldmine.
-
-**Log analysis checklist — go through ALL of these:**
-
-1. **Error/Fatal/Panic messages**: Count them, categorize them, quote the exact messages
-   - `ERROR: deadlock detected` → cross-reference with deadlock count in database_stats
-   - `FATAL: too many connections` → cross-reference with connection usage
-   - `ERROR: canceling statement due to statement timeout` → which queries are timing out?
-   - `FATAL: out of shared memory` → shared_buffers or lock table exhaustion
-   - `ERROR: could not extend file` → disk space issue
-   - `PANIC: ...` → database crash, investigate immediately
-
-2. **Slow query log entries** (if `log_min_duration_statement` is set):
-   - Count how many slow queries appear
-   - Identify which tables/queries are mentioned most often
-   - Cross-reference with top_queries — the same patterns should appear in both
-   - Note the actual durations logged vs mean_ms from pg_stat_statements
-
-3. **Autovacuum activity**:
-   - `LOG: automatic vacuum of table` → is autovacuum running? How often?
-   - `LOG: automatic analyze of table` → statistics being updated
-   - `WARNING: oldest xmin is far in the past` → XID wraparound risk
-   - Absence of autovacuum entries with high dead rows → autovacuum may be blocked or misconfigured
-
-4. **Checkpoint activity**:
-   - `LOG: checkpoint starting` / `LOG: checkpoint complete` → how frequent?
-   - `checkpoint complete: wrote X buffers (Y%)` → high Y% means lots of dirty data
-   - Time between checkpoints — if < 5 minutes, write load is high
-   - `checkpoints are occurring too frequently` → increase max_wal_size
-
-5. **Connection patterns**:
-   - `LOG: connection received` / `LOG: connection authorized` → connection rate
-   - `LOG: disconnection` → normal or unexpected? Check session duration
-   - `FATAL: remaining connection slots are reserved` → max_connections hit
-   - `FATAL: password authentication failed` → unauthorized access attempts
-
-6. **Replication messages**:
-   - `LOG: started streaming WAL` → replica connected
-   - `ERROR: requested WAL segment has already been removed` → replica too far behind
-   - `FATAL: could not receive data from WAL stream` → replication broken
-
-7. **Temporal patterns**:
-   - Are errors clustered in time? (burst vs steady)
-   - Do slow queries correlate with checkpoint times?
-   - Is there a pattern suggesting cron jobs or batch processing?
-
-State what you found with specifics: "Analyzed 1000 log lines covering 2024-01-15 14:00 to 15:30. Found: 23 slow query warnings (all SELECT on UserSession table, 200-800ms), 4 autovacuum runs, 2 checkpoints (normal interval), 0 errors. The slow queries correlate with the UserSession table's 76% cache hit rate."
-
-### Log Interpretation When Only Logs Are Available
-
-When `collection_status.database_query` failed and you only have logs:
-
-**Startup vs steady-state logs:**
-- `LOG: database system is ready to accept connections` — normal startup, NOT evidence of a crash
-- `LOG: started streaming WAL` — normal replication, NOT an error
-- `LOG: checkpoint starting` / `LOG: checkpoint complete` — routine operation
-- `FATAL: the database system is starting up` — transient during restarts, NOT a persistent problem
-
-**What you CAN say from logs alone:**
-- Whether errors or warnings are present and their frequency
-- Whether the database recently restarted (and that this is normal during deploys)
-- Whether there are connection refused errors (possible saturation or startup)
-
-**What you CANNOT say from logs alone:**
-- Whether the database is performing well or poorly
-- Whether cache hit ratios are good
-- Whether vacuum is behind
-- Whether queries are slow
-- Any tuning recommendations
-
-If only logs are available, explicitly state: "No performance conclusions possible — database metrics were not collected."
-
-**Active Issues:**
-- Long-running queries (>5s)
-- Idle in transaction (>30s)
-- Blocked queries (waiting on locks)
-- Lock contention details
-
-**Infrastructure:**
-- Disk usage %
-- CPU/memory usage
-- Replication status
-- HA cluster status (Patroni)
-- Background writer stats
-- WAL archiver status
-
-## PostgreSQL Tuning Knowledge
-
-Use this to reason about configuration issues:
-
-### Memory Parameters
-
-| Parameter | Default | Target | What It Does |
-|-----------|---------|--------|--------------|
-| `shared_buffers` | 128MB | 25% RAM | The database's main cache. Pages read from disk go here. Too small = constant disk I/O. |
-| `effective_cache_size` | 4GB | 75% RAM | NOT memory allocation - a hint to the planner about OS cache. Too low = planner avoids indexes. |
-| `work_mem` | 4MB | 16-64MB | Memory per sort/hash/join operation. Too low = temp files on disk. Caution: multiplied by concurrent operations. |
-| `maintenance_work_mem` | 64MB | 256MB-1GB | Memory for VACUUM, CREATE INDEX. Higher = faster maintenance. |
-
-### Tuning Formulas
-
-```
-shared_buffers = RAM × 0.25 (max 40%)
-  1GB RAM  → 256MB
-  4GB RAM  → 1GB
-  16GB RAM → 4GB
-
-work_mem = (RAM / max_connections) / 4
-  4GB RAM, 100 conns → 10MB
-  8GB RAM, 200 conns → 10MB
-
-effective_cache_size = RAM × 0.75
-  4GB RAM  → 3GB
-  16GB RAM → 12GB
+```json
+{
+  "metrics_history": {
+    "windows": {
+      "7d": { "window_hours": 168, "metrics": { "cpu": {...}, "memory": {...}, ... } },
+      "24h": { "window_hours": 24, "metrics": { "cpu": {...}, "memory": {...}, ... } }
+    }
+  }
+}
 ```
 
-### Settings Requiring Restart vs Immediate
+Each window independently computes:
+- **Summary stats**: current, min, max, avg for each metric
+- **Trend analysis**: compares first-quarter avg to last-quarter avg — reports direction (increasing/decreasing/stable) and % change
+- **Spike detection**: flags values > avg + 2*stddev with timestamps of peaks
+- **Downsampled series**: ~48 data points per window
 
-**Restart required:**
-- shared_buffers
-- max_connections
-- max_parallel_workers
+Available metrics: CPU, memory (with limits), disk, network RX/TX.
 
-**Immediate (SIGHUP):**
-- work_mem
-- effective_cache_size
-- random_page_cost
-- checkpoint_completion_target
+**Comparing windows reveals whether a trend is new or sustained:**
+- "Memory increasing in 24h but stable over 7d" → temporary spike, likely a batch job
+- "Memory increasing in both 24h AND 7d" → sustained growth, may need investigation
+- "CPU spike in 24h, no spikes in 7d" → new issue
+- "Disk growing over 7d" → data accumulation trend
 
-### SSD vs HDD
+Use `--metrics-hours N` to change the long window (default: 168, max: 168). The 24h window is always produced when the long window is > 24h.
 
-Railway uses SSDs. If `random_page_cost = 4.0` (HDD default), the planner thinks random reads are 4x more expensive than sequential - it avoids index scans. Set to 1.1-2.0 for SSDs.
+### Railway auto-scales vertically
 
-## Thresholds for Reasoning
+Railway services auto-scale CPU, RAM, and disk based on actual usage. Users do NOT pick or control resource sizes. The `cpu_limit` and `memory_limit` values from metrics are the **autoscale ceiling** (typically 32 vCPU / 32 GB), not user-provisioned allocations. Users are billed for actual usage, not the ceiling.
 
-| Metric | Healthy | Warning | Critical |
-|--------|---------|---------|----------|
-| Cache hit ratio | >99% | 95-99% | <95% |
-| Per-table cache hit | >95% | 80-95% | <80% with high reads |
-| Connection usage | <70% | 70-90% | >90% |
-| Disk usage | <70% | 70-85% | >85% |
-| Dead rows % | <5% | 5-20% | >20% |
-| XID age | <100M | 100-150M | >150M (emergency at 2B) |
-
-### Vacuum Priority Matrix
-
-Dead row percentage alone doesn't determine urgency. Use this matrix:
-
-| Table Size | Dead Rows | Priority |
-|------------|-----------|----------|
-| > 100 MB | > 10,000 | High - real bloat affecting performance |
-| > 50 MB | > 5,000 | Medium - worth addressing |
-| < 10 MB | Any | Low - negligible impact, ignore |
-| Any | < 1,000 | Low - autovacuum will handle it |
-
-A 1 MB table with 25% dead rows has ~250 KB of bloat. Not worth mentioning as "critical".
-
-## Applying Fixes
-
-When recommending changes, include the actual SQL:
-
-```sql
--- Memory tuning (example for 4GB RAM)
-ALTER SYSTEM SET shared_buffers = '1GB';
-ALTER SYSTEM SET effective_cache_size = '3GB';
-ALTER SYSTEM SET work_mem = '32MB';
-ALTER SYSTEM SET random_page_cost = 1.5;
-SELECT pg_reload_conf();
--- Note: shared_buffers requires restart
-```
-
-```sql
--- Vacuum specific tables
-VACUUM ANALYZE "TableName";
-
--- Emergency XID freeze
-VACUUM FREEZE "TableName";
-```
-
-## Enabling pg_stat_statements
-
-**ONLY suggest this if BOTH conditions are true:**
-1. `pg_stat_statements_installed` is `false` in the JSON output
-2. `top_queries` is empty or missing
-
-If these conditions are met, tell the user to run (do NOT execute with Bash):
-
-```
-python3 scripts/enable-pg-stats.py --service <name>
-```
-
-This may require a brief restart.
-
-**If `pg_stat_statements_installed: true` and `top_queries` has data, DO NOT suggest enabling it.**
-
-## Validated against
-
-- PostgreSQL system views: pg_stat_activity, pg_stat_statements, pg_statio_user_tables, pg_stat_user_tables
-- Patroni REST API for HA clusters
+**Rules for ALL database types:**
+- **Never say "right-size the instance"** or suggest reducing CPU/RAM — it's not a user action.
+- **Never flag low utilization % against the limit as waste** — a service showing 0.01 vCPU / 70 MB actual usage against a 32 vCPU / 32 GB ceiling is normal, not over-provisioned.
+- **Disk is also auto-provisioned** — volume size grows as needed. Users pay for actual disk used, not some pre-allocated amount.
+- **Focus on actual usage values**, not the ratio to limits. Analyze whether 70 MB of memory is healthy for this workload — don't compare it to the 32 GB ceiling.
+- When tuning database parameters (shared_buffers, innodb_buffer_pool_size, maxmemory, etc.), base recommendations on the **current actual RAM** from `metrics_history.memory`, not the limit.

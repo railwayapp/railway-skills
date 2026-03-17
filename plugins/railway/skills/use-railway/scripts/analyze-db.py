@@ -82,6 +82,8 @@ class RailwayContext:
             flags.extend(["--project", self.project_id])
         if self.environment_id:
             flags.extend(["--environment", self.environment_id])
+        if self.service_id:
+            flags.extend(["--service", self.service_id])
         return flags
 
     def logs_flags(self) -> List[str]:
@@ -166,6 +168,7 @@ class AnalysisResult:
     cluster_logs: List[Dict[str, Any]] = field(default_factory=list)
     recent_logs: List[str] = field(default_factory=list)  # Raw unfiltered logs for LLM analysis
     recent_errors: List[str] = field(default_factory=list)  # Legacy: filtered error logs
+    metrics_history: Optional[Dict[str, Any]] = None  # 24h time series + trend analysis for CPU, memory, disk, network
     collection_status: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # Status of each data source
     errors: List[str] = field(default_factory=list)
     recommendations: List[Dict[str, str]] = field(default_factory=list)
@@ -188,9 +191,22 @@ def run_railway_command(args: List[str], timeout: int = 30) -> Tuple[int, str, s
 
 
 def run_ssh_query(service: str, command: str, timeout: int = 60) -> Tuple[int, str, str]:
-    """Run a command via railway ssh."""
-    escaped_command = command.replace("'", "'\"'\"'")
-    args = ["ssh"] + _ctx.ssh_flags() + ["--service", service, "--", f"sh -c '{escaped_command}'"]
+    """Run a command via railway ssh.
+
+    Passes the command as a single argument after '--'. Railway ssh
+    interprets it through a shell on the remote end, so pipes, env vars,
+    and redirects all work without an explicit sh -c wrapper.
+
+    The old code wrapped commands in sh -c '...' as a single string,
+    which broke under subprocess (no shell to split the string into
+    separate argv entries) and also caused railway to eat the first
+    line of stdout.
+    """
+    flags = _ctx.ssh_flags()
+    # Only pass --service <name> if context didn't already provide --service <id>
+    if not _ctx.service_id:
+        flags += ["--service", service]
+    args = ["ssh"] + flags + ["--", command]
     return run_railway_command(args, timeout)
 
 
@@ -1213,11 +1229,18 @@ def get_cpu_memory_from_api(environment_id: str, service_id: str) -> Optional[Di
     return None
 
 
-def get_all_metrics_from_api(environment_id: str, service_id: str) -> Optional[Dict[str, Any]]:
-    """Get disk, CPU, and memory usage from Railway metrics API in a single call."""
+def get_all_metrics_from_api(environment_id: str, service_id: str, hours: int = 24) -> Optional[Dict[str, Any]]:
+    """Get disk, CPU, memory, and network usage from Railway metrics API.
+
+    Fetches time-series data and computes trend analysis including
+    min/max/avg, spike detection, and directional trends.
+
+    Args:
+        hours: Hours of history to fetch (default: 24, max: 168)
+    """
     from datetime import timedelta
 
-    start_date = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    start_date = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     api_script = os.path.join(script_dir, "railway-api.sh")
 
@@ -1234,7 +1257,11 @@ def get_all_metrics_from_api(environment_id: str, service_id: str) -> Optional[D
         "environmentId": environment_id,
         "serviceId": service_id,
         "startDate": start_date,
-        "measurements": ["DISK_USAGE_GB", "CPU_USAGE", "MEMORY_USAGE_GB"]
+        "measurements": [
+            "DISK_USAGE_GB", "CPU_USAGE", "MEMORY_USAGE_GB",
+            "MEMORY_LIMIT_GB", "CPU_LIMIT",
+            "NETWORK_RX_GB", "NETWORK_TX_GB",
+        ]
     })
 
     try:
@@ -1250,11 +1277,16 @@ def get_all_metrics_from_api(environment_id: str, service_id: str) -> Optional[D
         data = json.loads(result.stdout)
         metrics = data.get("data", {}).get("metrics", [])
 
-        combined = {"disk_usage": None, "cpu_memory": {}}
+        combined = {"disk_usage": None, "cpu_memory": {}, "metrics_history": None}
+
+        # Raw time series keyed by measurement name
+        raw_series: Dict[str, List[Dict[str, Any]]] = {}
+
         for metric in metrics:
             measurement = metric.get("measurement")
             values = metric.get("values", [])
             if values:
+                raw_series[measurement] = values
                 latest = values[-1].get("value", 0)
                 if measurement == "DISK_USAGE_GB":
                     combined["disk_usage"] = {
@@ -1265,14 +1297,156 @@ def get_all_metrics_from_api(environment_id: str, service_id: str) -> Optional[D
                     combined["cpu_memory"]["cpu_percent"] = round(latest, 1)
                 elif measurement == "MEMORY_USAGE_GB":
                     combined["cpu_memory"]["memory_gb"] = round(latest, 2)
+                elif measurement == "MEMORY_LIMIT_GB":
+                    combined["cpu_memory"]["memory_limit_gb"] = round(latest, 2)
+                elif measurement == "CPU_LIMIT":
+                    combined["cpu_memory"]["cpu_limit"] = round(latest, 1)
 
         if not combined["cpu_memory"]:
             combined["cpu_memory"] = None
+
+        # Build time-series history with trend analysis
+        if raw_series:
+            combined["metrics_history"] = _build_metrics_history(raw_series, hours=hours)
+
         return combined
     except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
         pass
 
     return None
+
+
+def _build_metrics_history(raw_series: Dict[str, List[Dict[str, Any]]], hours: int = 24) -> Dict[str, Any]:
+    """Build time-series history with trend analysis from raw API data.
+
+    Returns a dict with per-metric summaries, time series, and trend analysis.
+    """
+    from datetime import timedelta
+
+    # Friendly names and units
+    metric_info = {
+        "CPU_USAGE": {"name": "cpu", "unit": "vCPU", "decimals": 2},
+        "MEMORY_USAGE_GB": {"name": "memory", "unit": "GB", "decimals": 2},
+        "MEMORY_LIMIT_GB": {"name": "memory_limit", "unit": "GB", "decimals": 2},
+        "CPU_LIMIT": {"name": "cpu_limit", "unit": "vCPU", "decimals": 2},
+        "DISK_USAGE_GB": {"name": "disk", "unit": "GB", "decimals": 2},
+        "NETWORK_RX_GB": {"name": "network_rx", "unit": "GB", "decimals": 3},
+        "NETWORK_TX_GB": {"name": "network_tx", "unit": "GB", "decimals": 3},
+    }
+
+    history: Dict[str, Any] = {
+        "window_hours": hours,
+        "metrics": {},
+    }
+
+    for measurement, values in raw_series.items():
+        info = metric_info.get(measurement)
+        if not info or len(values) < 2:
+            continue
+
+        nums = [v["value"] for v in values if v.get("value") is not None]
+        if not nums:
+            continue
+
+        d = info["decimals"]
+        name = info["name"]
+        avg_val = sum(nums) / len(nums)
+        min_val = min(nums)
+        max_val = max(nums)
+
+        # Summary stats
+        entry: Dict[str, Any] = {
+            "unit": info["unit"],
+            "current": round(nums[-1], d),
+            "min": round(min_val, d),
+            "max": round(max_val, d),
+            "avg": round(avg_val, d),
+            "samples": len(nums),
+        }
+
+        # Trend: compare first quarter avg to last quarter avg
+        q_size = max(len(nums) // 4, 1)
+        first_q = nums[:q_size]
+        last_q = nums[-q_size:]
+        first_avg = sum(first_q) / len(first_q)
+        last_avg = sum(last_q) / len(last_q)
+
+        if first_avg > 0:
+            change_pct = round(((last_avg - first_avg) / first_avg) * 100, 1)
+        elif last_avg > 0:
+            change_pct = 100.0
+        else:
+            change_pct = 0.0
+
+        if change_pct > 10:
+            trend_dir = "increasing"
+        elif change_pct < -10:
+            trend_dir = "decreasing"
+        else:
+            trend_dir = "stable"
+
+        entry["trend"] = {
+            "direction": trend_dir,
+            "change_pct": change_pct,
+            "first_quarter_avg": round(first_avg, d),
+            "last_quarter_avg": round(last_avg, d),
+        }
+
+        # Spike detection: values > avg + 2*stddev
+        if len(nums) >= 10:
+            variance = sum((x - avg_val) ** 2 for x in nums) / len(nums)
+            stddev = variance ** 0.5
+            threshold = avg_val + 2 * stddev
+            if stddev > 0 and threshold > 0:
+                spikes = []
+                for v in values:
+                    val = v.get("value")
+                    if val is not None and val > threshold:
+                        spikes.append({"ts": v["ts"], "value": round(val, d)})
+                if spikes:
+                    entry["spikes"] = {
+                        "count": len(spikes),
+                        "threshold": round(threshold, d),
+                        "peaks": spikes[:10],  # Top 10 spike timestamps
+                    }
+
+        # Compact time series: downsample to ~48 points (30-min buckets) for JSON output
+        series_points = []
+        for v in values:
+            ts = v.get("ts")
+            val = v.get("value")
+            if ts is not None and val is not None:
+                series_points.append({"ts": ts, "value": round(val, d)})
+
+        if len(series_points) > 48:
+            # Downsample by picking evenly spaced points
+            step = len(series_points) / 48
+            downsampled = []
+            for i in range(48):
+                idx = int(i * step)
+                downsampled.append(series_points[idx])
+            # Always include the last point
+            downsampled.append(series_points[-1])
+            entry["series"] = downsampled
+        else:
+            entry["series"] = series_points
+
+        history["metrics"][name] = entry
+
+    # Cross-metric utilization percentages
+    m = history["metrics"]
+    if "memory" in m and "memory_limit" in m:
+        limit = m["memory_limit"]["current"]
+        if limit > 0:
+            m["memory"]["utilization_pct"] = round((m["memory"]["current"] / limit) * 100, 1)
+            m["memory"]["max_utilization_pct"] = round((m["memory"]["max"] / limit) * 100, 1)
+    if "cpu" in m and "cpu_limit" in m:
+        limit = m["cpu_limit"]["current"]
+        if limit > 0:
+            m["cpu"]["utilization_pct"] = round((m["cpu"]["current"] / limit) * 100, 1)
+            m["cpu"]["max_utilization_pct"] = round((m["cpu"]["max"] / limit) * 100, 1)
+
+    return history
 
 
 def get_recent_logs(service: str, lines: int = LOG_LINES_DEFAULT,
@@ -1281,6 +1455,7 @@ def get_recent_logs(service: str, lines: int = LOG_LINES_DEFAULT,
     """Get recent logs for LLM analysis.
 
     Uses API if environment_id and service_id provided (~3s),
+    retries once with longer timeout on failure,
     falls back to CLI (~27s for 100 lines).
     """
     # Fast path: use API directly
@@ -1300,19 +1475,22 @@ def get_recent_logs(service: str, lines: int = LOG_LINES_DEFAULT,
                     message
                 }}
             }}'''
-            try:
-                result = subprocess.run(
-                    [api_script, query],
-                    capture_output=True,
-                    text=True,
-                    timeout=15
-                )
-                if result.returncode == 0:
-                    data = json.loads(result.stdout)
-                    logs_data = data.get("data", {}).get("environmentLogs", [])
-                    return [f"{log['timestamp']} {log['message']}" for log in logs_data]
-            except (subprocess.TimeoutExpired, json.JSONDecodeError):
-                pass
+            # Try API twice: first with 15s timeout, retry with 30s
+            for attempt_timeout in [15, 30]:
+                try:
+                    result = subprocess.run(
+                        [api_script, query],
+                        capture_output=True,
+                        text=True,
+                        timeout=attempt_timeout
+                    )
+                    if result.returncode == 0:
+                        data = json.loads(result.stdout)
+                        logs_data = data.get("data", {}).get("environmentLogs", [])
+                        if logs_data:
+                            return [f"{log['timestamp']} {log['message']}" for log in logs_data]
+                except (subprocess.TimeoutExpired, json.JSONDecodeError):
+                    pass
 
     # Fallback: use CLI (slow, ~27s)
     code, stdout, stderr = run_railway_command(
@@ -1486,6 +1664,7 @@ def is_postgres_ha_service(service_id: Optional[str]) -> bool:
 
 def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
                      skip_logs: bool = False,
+                     metrics_hours: int = 24,
                      project_id: Optional[str] = None,
                      environment_id: Optional[str] = None,
                      service_id: Optional[str] = None) -> AnalysisResult:
@@ -1496,6 +1675,7 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
 
     Args:
         skip_logs: Skip log fetching for faster analysis (~60s saved)
+        metrics_hours: Hours of metrics history to fetch (default: 24, max: 168)
         project_id: Project ID (bypasses railway link config)
         environment_id: Environment ID (bypasses railway link config)
         service_id: Service ID (bypasses railway link config)
@@ -1542,13 +1722,23 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
     progress(1, 5, "Fetching deployment status...", quiet)
     result.deployment_status = get_deployment_status(service, service_id=service_id)
 
-    # === SSH PRE-CHECK ===
-    # Quick SSH connectivity test to avoid 60s+ timeout on batched query
+    # === SSH PRE-CHECK WITH RETRY ===
+    # SSH can be flaky — retry with increasing timeouts before giving up
     progress(2, 4, "Testing SSH connectivity...", quiet)
     ssh_available = False
-    ssh_code, ssh_stdout, ssh_stderr = run_ssh_query(service, "echo ok", timeout=90)
-    if ssh_code == 0 and "ok" in ssh_stdout:
-        ssh_available = True
+    ssh_stderr = ""
+    ssh_attempts = [30, 60, 90]
+    for attempt, attempt_timeout in enumerate(ssh_attempts, 1):
+        ssh_code, ssh_stdout, ssh_stderr = run_ssh_query(service, "echo ok", timeout=attempt_timeout)
+        if ssh_code == 0 and "ok" in ssh_stdout:
+            ssh_available = True
+            break
+        if not quiet:
+            remaining = len(ssh_attempts) - attempt
+            if remaining > 0:
+                print(f"        SSH attempt {attempt}/{len(ssh_attempts)} failed ({ssh_stderr or 'no response'}), retrying with {ssh_attempts[attempt]}s timeout...", file=sys.stderr, flush=True)
+            else:
+                print(f"        SSH attempt {attempt}/{len(ssh_attempts)} failed ({ssh_stderr or 'no response'}), giving up", file=sys.stderr, flush=True)
 
     # === PARALLEL EXECUTION OF SLOW OPERATIONS ===
     # Run metrics API, database query, and logs in parallel (~17-27s down to ~max of the three)
@@ -1560,14 +1750,20 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
     def task_metrics():
         """Fetch all metrics (disk, CPU, memory) in one API call."""
         if environment_id and service_id:
-            return get_all_metrics_from_api(environment_id, service_id)
+            return get_all_metrics_from_api(environment_id, service_id, hours=metrics_hours)
         return None
 
     def task_database_query():
-        """Run the batched database analysis query."""
+        """Run the batched database analysis query with retry."""
         if not ssh_available:
             return (1, "", f"SSH not available: {ssh_stderr or 'connection failed'}")
-        return run_psql_query_safe(service, analysis_query, timeout=timeout)
+        code, stdout, stderr = run_psql_query_safe(service, analysis_query, timeout=timeout)
+        if code != 0:
+            # Retry once — SSH sessions can drop mid-query
+            if not quiet:
+                print(f"        Database query failed ({stderr or 'unknown'}), retrying...", file=sys.stderr, flush=True)
+            code, stdout, stderr = run_psql_query_safe(service, analysis_query, timeout=timeout)
+        return (code, stdout, stderr)
 
     def task_logs():
         """Fetch recent logs via API (~3s)."""
@@ -1618,10 +1814,11 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
         logs_result = future_logs.result()
         ha_result = future_ha.result()
 
-    # Process metrics result (combined disk + cpu/memory)
+    # Process metrics result (combined disk + cpu/memory + 24h history)
     if metrics_result:
         result.disk_usage = metrics_result.get("disk_usage")
         result.cpu_memory = metrics_result.get("cpu_memory")
+        result.metrics_history = metrics_result.get("metrics_history")
         result.collection_status["metrics_api"] = {"status": "success"}
     else:
         result.collection_status["metrics_api"] = {
@@ -1645,7 +1842,7 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
     else:
         error_msg = stderr or stdout or "Unknown error"
         if not ssh_available:
-            error_msg = f"SSH not available: {ssh_stderr or 'connection failed'}"
+            error_msg = f"SSH failed after {len(ssh_attempts)} attempts: {ssh_stderr or 'connection failed'}"
         result.errors.append(f"Batched analysis query failed: {error_msg}")
         result.collection_status["database_query"] = {
             "status": "error",
@@ -1711,6 +1908,24 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
     """Generate recommendations based on analysis results."""
     recommendations = []
 
+    # Collection failures — surface critical issues when SSH/introspection failed
+    if result.collection_status:
+        failed = {k: v for k, v in result.collection_status.items()
+                  if v.get("status") in ("failed", "error")}
+        ssh_sources = {"database_query", "ha_cluster"}
+        ssh_failed = {k: v for k, v in failed.items() if k in ssh_sources}
+        if ssh_failed:
+            sources = ", ".join(ssh_failed.keys())
+            errors = "; ".join(v.get("error", "unknown") for v in ssh_failed.values())
+            recommendations.append({
+                "severity": "critical",
+                "category": "collection",
+                "message": f"SSH introspection failed — unable to collect {sources}. "
+                           f"Error: {errors}. "
+                           f"Analysis is incomplete: connection stats, query performance, "
+                           f"table bloat, and tuning parameters could not be evaluated.",
+            })
+
     # === POSTGRESQL TUNING RECOMMENDATIONS ===
     # Based on best practices from PostgreSQL wiki and community
     if result.memory_config:
@@ -1718,8 +1933,11 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
 
         # Get system memory from CPU/memory metrics if available
         system_memory_gb = None
-        if result.cpu_memory and "memory_gb" in result.cpu_memory:
-            # This is current usage, estimate total as ~2x if usage is moderate
+        if result.cpu_memory and "memory_limit_gb" in result.cpu_memory:
+            # Use actual memory limit from Railway API
+            system_memory_gb = result.cpu_memory["memory_limit_gb"]
+        elif result.cpu_memory and "memory_gb" in result.cpu_memory:
+            # Fallback: estimate total as ~2x current usage
             system_memory_gb = result.cpu_memory["memory_gb"] * 2  # rough estimate
 
         # shared_buffers check (should be ~25% of RAM, max ~40%)
@@ -2572,6 +2790,22 @@ def sum_index_sizes(indexes: List[Dict[str, Any]]) -> str:
     return f"{total_bytes} bytes"
 
 
+def _trend_indicator(metrics_history: Optional[Dict[str, Any]], metric_name: str) -> str:
+    """Return a compact trend string like ' (^ +15.2% 24h)' for use in summary rows."""
+    if not metrics_history or not metrics_history.get("metrics"):
+        return ""
+    m = metrics_history["metrics"].get(metric_name)
+    if not m or "trend" not in m:
+        return ""
+    t = m["trend"]
+    direction = t.get("direction", "stable")
+    change = t.get("change_pct", 0)
+    arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "")
+    if direction == "stable":
+        return f" ({arrow} stable 24h)"
+    return f" ({arrow} {change:+.1f}% 24h)"
+
+
 def format_report(result: AnalysisResult) -> str:
     """Format analysis result as human-readable report."""
     lines = []
@@ -2680,15 +2914,26 @@ def format_report(result: AnalysisResult) -> str:
         status = "Critical" if millions > 150 else "Warning" if millions > 100 else "Healthy"
         lines.append(f"| XID Age | {millions}M | {status} |")
 
-    # CPU/Memory
+    # CPU/Memory (with trend indicators from 24h history)
     if result.cpu_memory:
         if "cpu_percent" in result.cpu_memory:
             cpu = result.cpu_memory["cpu_percent"]
             status = "Critical" if cpu > 85 else "Warning" if cpu > 70 else "Healthy"
-            lines.append(f"| CPU Usage | {cpu}% | {status} |")
+            trend_str = _trend_indicator(result.metrics_history, "cpu")
+            lines.append(f"| CPU Usage | {cpu} vCPU{trend_str} | {status} |")
+            if result.cpu_memory.get("cpu_limit"):
+                lines.append(f"| CPU Limit | {result.cpu_memory['cpu_limit']} vCPU | - |")
         if "memory_gb" in result.cpu_memory:
             mem = result.cpu_memory["memory_gb"]
-            lines.append(f"| Memory Usage | {mem} GB | - |")
+            trend_str = _trend_indicator(result.metrics_history, "memory")
+            utilization = ""
+            if result.cpu_memory.get("memory_limit_gb"):
+                pct = round((mem / result.cpu_memory["memory_limit_gb"]) * 100, 1)
+                status = "Critical" if pct > 90 else "Warning" if pct > 80 else "Healthy"
+                utilization = f" ({pct}% of {result.cpu_memory['memory_limit_gb']} GB)"
+            else:
+                status = "-"
+            lines.append(f"| Memory Usage | {mem} GB{utilization}{trend_str} | {status} |")
 
     # Database stats
     if result.database_stats:
@@ -2746,6 +2991,40 @@ def format_report(result: AnalysisResult) -> str:
     lines.append(f"| pg_stat_statements | {pss_status} | {pss_icon} |")
 
     lines.append("")
+
+    # Infrastructure Trends (24h)
+    if result.metrics_history and result.metrics_history.get("metrics"):
+        lines.append("## Infrastructure Trends (24h)")
+        lines.append("")
+        lines.append("| Metric | Current | Min | Max | Avg | Trend | Change |")
+        lines.append("|--------|---------|-----|-----|-----|-------|--------|")
+        display_order = [
+            ("cpu", "CPU"),
+            ("memory", "Memory"),
+            ("disk", "Disk"),
+            ("network_rx", "Network RX"),
+            ("network_tx", "Network TX"),
+        ]
+        mh = result.metrics_history["metrics"]
+        for key, label in display_order:
+            if key in mh:
+                m = mh[key]
+                unit = m["unit"]
+                trend = m.get("trend", {})
+                direction = trend.get("direction", "?")
+                change = trend.get("change_pct", 0)
+                arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "?")
+                spike_note = ""
+                if m.get("spikes"):
+                    spike_note = f" ({m['spikes']['count']} spikes)"
+                util_note = ""
+                if m.get("max_utilization_pct"):
+                    util_note = f" (peak {m['max_utilization_pct']}% util)"
+                lines.append(
+                    f"| {label} | {m['current']} {unit} | {m['min']} | {m['max']} | {m['avg']} | "
+                    f"{arrow} {direction} | {change:+.1f}%{spike_note}{util_note} |"
+                )
+        lines.append("")
 
     # PostgreSQL Configuration (tuning parameters)
     if result.memory_config:
@@ -3199,6 +3478,8 @@ def main():
                        help="Suppress progress messages")
     parser.add_argument("--skip-logs", action="store_true",
                        help="Skip log fetching for faster analysis")
+    parser.add_argument("--metrics-hours", type=int, default=24,
+                       help="Hours of metrics history to fetch (default: 24, max: 168)")
     parser.add_argument("--step", choices=["ssh-test", "query", "logs", "metrics"],
                        help="Run a single collection step for debugging")
     parser.add_argument("--project-id", help="Project ID (bypasses railway link)")
@@ -3215,6 +3496,7 @@ def main():
     if args.db_type == "postgres":
         result = analyze_postgres(args.service, timeout=args.timeout, quiet=args.quiet,
                                   skip_logs=args.skip_logs,
+                                  metrics_hours=min(args.metrics_hours, 168),
                                   project_id=args.project_id,
                                   environment_id=args.environment_id,
                                   service_id=args.service_id)
@@ -3240,7 +3522,7 @@ def run_single_step(args) -> int:
 
     if args.step == "ssh-test":
         print(f"Testing SSH to service: {service}", file=sys.stderr)
-        code, stdout, stderr = run_ssh_query(service, "echo ok", timeout=15)
+        code, stdout, stderr = run_ssh_query(service, "echo ok", timeout=45)
         print(f"Exit code: {code}")
         print(f"Stdout: {stdout.strip()}")
         if stderr:
