@@ -7,7 +7,7 @@ description: >
   and query Railway docs. Use this skill whenever the user mentions Railway,
   deployments, services, environments, buckets, object storage, build failures,
   or infrastructure operations, even if they don't say "Railway" explicitly.
-allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*)
+allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*), Bash(python3:*)
 ---
 
 # Use Railway
@@ -24,6 +24,31 @@ Railway organizes infrastructure in a hierarchy:
 - **Deployment** is a point-in-time release of a service in an environment. It has build logs, runtime logs, and a status lifecycle.
 
 Most CLI commands operate on the linked project/environment/service context. Use `railway status --json` to see the context, and `--project`, `--environment`, `--service` flags to override.
+
+## Parsing Railway URLs
+
+Users often paste Railway dashboard URLs. Extract IDs before doing anything else:
+
+```
+https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>?environmentId=<ENV_ID>
+https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>
+```
+
+The URL always contains `projectId` and `serviceId`. It may contain `environmentId` as a query parameter. If the environment ID is missing and the user specifies an environment by name (e.g., "production"), resolve it:
+
+```bash
+scripts/railway-api.sh \
+  'query getProject($id: String!) {
+    project(id: $id) {
+      environments { edges { node { id name } } }
+    }
+  }' \
+  '{"id": "<PROJECT_ID>"}'
+```
+
+Match the environment name (case-insensitive) to get the `environmentId`.
+
+**Prefer passing explicit IDs** to CLI commands (`--project`, `--environment`, `--service`) and scripts (`--project-id`, `--environment-id`, `--service-id`) instead of running `railway link`. This avoids modifying global state and is faster.
 
 ## Preflight
 

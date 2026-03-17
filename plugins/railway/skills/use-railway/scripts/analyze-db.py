@@ -31,7 +31,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field, asdict
 
 # Configuration
-LOG_LINES_DEFAULT = 300  # Number of log lines to fetch via API
+LOG_LINES_DEFAULT = 1000  # Number of log lines to fetch via API
 
 
 class ProgressTimer:
@@ -66,6 +66,53 @@ class ProgressTimer:
 
 # Global timer instance
 _progress_timer = ProgressTimer()
+
+
+@dataclass
+class RailwayContext:
+    """Explicit Railway IDs that bypass railway link."""
+    project_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    service_id: Optional[str] = None
+
+    def ssh_flags(self) -> List[str]:
+        """Return CLI flags for railway ssh."""
+        flags = []
+        if self.project_id:
+            flags.extend(["--project", self.project_id])
+        if self.environment_id:
+            flags.extend(["--environment", self.environment_id])
+        return flags
+
+    def logs_flags(self) -> List[str]:
+        """Return CLI flags for railway logs."""
+        flags = []
+        if self.environment_id:
+            flags.extend(["--environment", self.environment_id])
+        return flags
+
+
+# Global context — set once at startup, used by all CLI calls
+_ctx = RailwayContext()
+
+
+def _init_context(args) -> None:
+    """Initialize global context from CLI args or railway config."""
+    global _ctx
+    if args.environment_id and args.service_id:
+        _ctx = RailwayContext(
+            project_id=getattr(args, 'project_id', None),
+            environment_id=args.environment_id,
+            service_id=args.service_id,
+        )
+    else:
+        railway_status = get_railway_status()
+        if railway_status:
+            _ctx = RailwayContext(
+                project_id=railway_status.get("projectId"),
+                environment_id=railway_status.get("environmentId"),
+                service_id=railway_status.get("serviceId"),
+            )
 
 
 def progress(step: int, total: int, message: str, quiet: bool = False):
@@ -119,6 +166,7 @@ class AnalysisResult:
     cluster_logs: List[Dict[str, Any]] = field(default_factory=list)
     recent_logs: List[str] = field(default_factory=list)  # Raw unfiltered logs for LLM analysis
     recent_errors: List[str] = field(default_factory=list)  # Legacy: filtered error logs
+    collection_status: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # Status of each data source
     errors: List[str] = field(default_factory=list)
     recommendations: List[Dict[str, str]] = field(default_factory=list)
 
@@ -142,7 +190,7 @@ def run_railway_command(args: List[str], timeout: int = 30) -> Tuple[int, str, s
 def run_ssh_query(service: str, command: str, timeout: int = 60) -> Tuple[int, str, str]:
     """Run a command via railway ssh."""
     escaped_command = command.replace("'", "'\"'\"'")
-    args = ["ssh", "--service", service, "--", f"sh -c '{escaped_command}'"]
+    args = ["ssh"] + _ctx.ssh_flags() + ["--service", service, "--", f"sh -c '{escaped_command}'"]
     return run_railway_command(args, timeout)
 
 
@@ -192,7 +240,10 @@ SELECT json_build_object(
             'wal_buffers', 'checkpoint_completion_target', 'min_wal_size', 'max_wal_size',
             'max_parallel_workers', 'max_parallel_workers_per_gather', 'random_page_cost',
             'default_statistics_target', 'synchronous_commit', 'max_connections',
-            'autovacuum', 'autovacuum_vacuum_scale_factor', 'autovacuum_analyze_scale_factor'
+            'autovacuum', 'autovacuum_vacuum_scale_factor', 'autovacuum_analyze_scale_factor',
+            'track_activity_query_size', 'log_min_duration_statement',
+            'idle_in_transaction_session_timeout', 'statement_timeout',
+            'track_io_timing'
         )
     ),
     'cache_hit', (
@@ -404,14 +455,27 @@ SELECT json_build_object(
                 calls,
                 ROUND(total_exec_time::numeric/1000/60, 1) as total_min,
                 ROUND(mean_exec_time::numeric, 1) as mean_ms,
+                ROUND(min_exec_time::numeric, 1) as min_ms,
                 ROUND(max_exec_time::numeric, 1) as max_ms,
+                ROUND(stddev_exec_time::numeric, 1) as stddev_ms,
                 rows,
+                CASE WHEN calls > 0 THEN ROUND(rows::numeric / calls, 2) ELSE 0 END as rows_per_call,
                 total_exec_time,
+                ROUND(total_plan_time::numeric, 1) as total_plan_ms,
+                ROUND(mean_plan_time::numeric, 1) as mean_plan_ms,
                 shared_blks_hit,
                 shared_blks_read,
+                shared_blks_dirtied,
+                shared_blks_written,
                 ROUND(100.0 * shared_blks_hit / NULLIF(shared_blks_hit + shared_blks_read, 0), 2) as cache_hit_pct,
+                local_blks_hit,
+                local_blks_read,
                 temp_blks_read,
-                temp_blks_written
+                temp_blks_written,
+                ROUND(blk_read_time::numeric, 1) as blk_read_time_ms,
+                ROUND(blk_write_time::numeric, 1) as blk_write_time_ms,
+                wal_records,
+                wal_bytes
             FROM pg_stat_statements s
             JOIN pg_database d ON s.dbid = d.oid
             WHERE d.datname = current_database()
@@ -612,7 +676,7 @@ def parse_batched_analysis(data: Dict[str, Any], result: AnalysisResult) -> None
             elif name in ("random_page_cost", "checkpoint_completion_target", "autovacuum_vacuum_scale_factor", "autovacuum_analyze_scale_factor"):
                 # Float settings
                 result.memory_config[name] = {"value": float(setting) if setting else 0}
-            elif name in ("synchronous_commit", "autovacuum"):
+            elif name in ("synchronous_commit", "autovacuum", "track_io_timing"):
                 # On/off settings
                 result.memory_config[name] = {"value": setting}
             else:
@@ -797,13 +861,26 @@ def parse_batched_analysis(data: Dict[str, Any], result: AnalysisResult) -> None
             "calls": str(t.get("calls", 0)),
             "total_min": str(t.get("total_min", 0)),
             "mean_ms": str(t.get("mean_ms", 0)),
+            "min_ms": str(t.get("min_ms", 0)),
             "max_ms": str(t.get("max_ms", 0)),
+            "stddev_ms": str(t.get("stddev_ms", 0)),
             "rows": str(t.get("rows", 0)),
+            "rows_per_call": str(t.get("rows_per_call", 0)),
+            "total_plan_ms": str(t.get("total_plan_ms", 0)),
+            "mean_plan_ms": str(t.get("mean_plan_ms", 0)),
             "shared_blks_hit": t.get("shared_blks_hit", 0),
             "shared_blks_read": t.get("shared_blks_read", 0),
+            "shared_blks_dirtied": t.get("shared_blks_dirtied", 0),
+            "shared_blks_written": t.get("shared_blks_written", 0),
             "cache_hit_pct": t.get("cache_hit_pct"),
+            "local_blks_hit": t.get("local_blks_hit", 0),
+            "local_blks_read": t.get("local_blks_read", 0),
             "temp_blks_read": t.get("temp_blks_read", 0),
             "temp_blks_written": t.get("temp_blks_written", 0),
+            "blk_read_time_ms": str(t.get("blk_read_time_ms", 0)),
+            "blk_write_time_ms": str(t.get("blk_write_time_ms", 0)),
+            "wal_records": t.get("wal_records", 0),
+            "wal_bytes": t.get("wal_bytes", 0),
         }
         for t in top_q
     ]
@@ -1239,7 +1316,7 @@ def get_recent_logs(service: str, lines: int = LOG_LINES_DEFAULT,
 
     # Fallback: use CLI (slow, ~27s)
     code, stdout, stderr = run_railway_command(
-        ["logs", "--service", service, "--lines", str(lines)],
+        ["logs"] + _ctx.logs_flags() + ["--service", service, "--lines", str(lines)],
         timeout=30
     )
     if code != 0:
@@ -1408,7 +1485,10 @@ def is_postgres_ha_service(service_id: Optional[str]) -> bool:
 
 
 def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
-                     skip_logs: bool = False) -> AnalysisResult:
+                     skip_logs: bool = False,
+                     project_id: Optional[str] = None,
+                     environment_id: Optional[str] = None,
+                     service_id: Optional[str] = None) -> AnalysisResult:
     """Run complete Postgres analysis with maximum data collection.
 
     Uses a single batched SQL query to collect all database metrics,
@@ -1416,6 +1496,9 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
 
     Args:
         skip_logs: Skip log fetching for faster analysis (~60s saved)
+        project_id: Project ID (bypasses railway link config)
+        environment_id: Environment ID (bypasses railway link config)
+        service_id: Service ID (bypasses railway link config)
     """
     if not quiet:
         print(f"Analyzing postgres database: {service}", file=sys.stderr)
@@ -1427,15 +1510,28 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
     )
 
     # === FAST CONTEXT LOADING ===
-    # Read from config file (instant) + API call for status (~1s)
+    # Use explicit IDs if provided, otherwise read from config file (instant)
     if not quiet:
-        print("  [0/4] Getting Railway context...", file=sys.stderr, flush=True)
+        print("  [0/5] Getting Railway context...", file=sys.stderr, flush=True)
     _progress_timer.start()
 
-    # Read railway context from local config (instant, no API call)
-    railway_status = get_railway_status()
-    environment_id = railway_status.get("environmentId") if railway_status else None
-    service_id = railway_status.get("serviceId") if railway_status else None
+    global _ctx
+    if environment_id and service_id:
+        # IDs passed directly — no need to read config or link
+        _ctx = RailwayContext(project_id=project_id, environment_id=environment_id, service_id=service_id)
+        if not quiet:
+            print(f"        using explicit IDs (env={environment_id[:8]}..., svc={service_id[:8]}...)", file=sys.stderr, flush=True)
+    else:
+        # Fall back to reading railway context from local config (instant, no API call)
+        railway_status = get_railway_status()
+        if railway_status:
+            _ctx = RailwayContext(
+                project_id=railway_status.get("projectId"),
+                environment_id=railway_status.get("environmentId"),
+                service_id=railway_status.get("serviceId"),
+            )
+        environment_id = _ctx.environment_id
+        service_id = _ctx.service_id
 
     # Check if this is an HA service - only call API if name suggests HA
     is_ha_service = False
@@ -1443,12 +1539,20 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
         is_ha_service = is_postgres_ha_service(service_id)
 
     # Get deployment status via API (~1s) instead of CLI (~15s)
-    progress(1, 4, "Fetching deployment status...", quiet)
+    progress(1, 5, "Fetching deployment status...", quiet)
     result.deployment_status = get_deployment_status(service, service_id=service_id)
+
+    # === SSH PRE-CHECK ===
+    # Quick SSH connectivity test to avoid 60s+ timeout on batched query
+    progress(2, 4, "Testing SSH connectivity...", quiet)
+    ssh_available = False
+    ssh_code, ssh_stdout, ssh_stderr = run_ssh_query(service, "echo ok", timeout=90)
+    if ssh_code == 0 and "ok" in ssh_stdout:
+        ssh_available = True
 
     # === PARALLEL EXECUTION OF SLOW OPERATIONS ===
     # Run metrics API, database query, and logs in parallel (~17-27s down to ~max of the three)
-    progress(2, 4, "Running analysis (metrics, query, logs in parallel)...", quiet)
+    progress(3, 4, "Running analysis (metrics, query, logs in parallel)...", quiet)
 
     analysis_query = build_analysis_query()
 
@@ -1461,6 +1565,8 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
 
     def task_database_query():
         """Run the batched database analysis query."""
+        if not ssh_available:
+            return (1, "", f"SSH not available: {ssh_stderr or 'connection failed'}")
         return run_psql_query_safe(service, analysis_query, timeout=timeout)
 
     def task_logs():
@@ -1474,7 +1580,9 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
     def task_ha_cluster():
         """Check HA cluster status (Patroni)."""
         if not is_ha_service:
-            return None
+            return "skipped_not_ha"
+        if not ssh_available:
+            return "skipped_no_ssh"
         code, stdout, stderr = run_ssh_query(service, "curl -s localhost:8008/cluster 2>/dev/null || echo '{}'")
         if code == 0 and stdout and stdout.strip() != "{}":
             try:
@@ -1514,6 +1622,12 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
     if metrics_result:
         result.disk_usage = metrics_result.get("disk_usage")
         result.cpu_memory = metrics_result.get("cpu_memory")
+        result.collection_status["metrics_api"] = {"status": "success"}
+    else:
+        result.collection_status["metrics_api"] = {
+            "status": "error",
+            "error": "Metrics API returned no data"
+        }
 
     # Process database query result
     code, stdout, stderr = db_result
@@ -1521,17 +1635,49 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
         try:
             data = json.loads(stdout.strip())
             parse_batched_analysis(data, result)
+            result.collection_status["database_query"] = {"status": "success"}
         except json.JSONDecodeError as e:
             result.errors.append(f"Failed to parse batched analysis JSON: {e}")
+            result.collection_status["database_query"] = {
+                "status": "error",
+                "error": f"JSON parse error: {e}"
+            }
     else:
-        result.errors.append(f"Batched analysis query failed: {stderr or stdout}")
+        error_msg = stderr or stdout or "Unknown error"
+        if not ssh_available:
+            error_msg = f"SSH not available: {ssh_stderr or 'connection failed'}"
+        result.errors.append(f"Batched analysis query failed: {error_msg}")
+        result.collection_status["database_query"] = {
+            "status": "error",
+            "error": error_msg
+        }
 
     # Process HA cluster result
-    result.ha_cluster = ha_result
+    if ha_result == "skipped_not_ha":
+        result.ha_cluster = None
+        result.collection_status["ha_cluster"] = {"status": "skipped", "reason": "not an HA service"}
+    elif ha_result == "skipped_no_ssh":
+        result.ha_cluster = None
+        result.collection_status["ha_cluster"] = {"status": "skipped", "reason": "SSH not available"}
+    elif ha_result is not None:
+        result.ha_cluster = ha_result
+        result.collection_status["ha_cluster"] = {"status": "success"}
+    else:
+        result.ha_cluster = None
+        result.collection_status["ha_cluster"] = {
+            "status": "error" if is_ha_service else "skipped",
+            "error": "Failed to retrieve Patroni cluster data" if is_ha_service else "not an HA service"
+        }
 
     # Process logs result
-    if not skip_logs:
+    if skip_logs:
+        result.collection_status["logs_api"] = {"status": "skipped", "reason": "skip_logs flag set"}
+    elif logs_result:
         result.recent_logs = logs_result
+        result.collection_status["logs_api"] = {
+            "status": "success",
+            "lines": len(logs_result)
+        }
 
         # Extract error logs locally
         result.recent_errors = [
@@ -1541,11 +1687,17 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
 
         # HA cluster logs (API call) - done after parallel since it depends on ha_cluster
         if result.ha_cluster and environment_id:
-            progress(3, 4, "Fetching HA cluster logs...", quiet)
+            progress(4, 5, "Fetching HA cluster logs...", quiet)
             result.cluster_logs = get_cluster_logs(result.ha_cluster, environment_id, limit=5000)
+    else:
+        result.recent_logs = []
+        result.collection_status["logs_api"] = {
+            "status": "error",
+            "error": "Logs API returned no data"
+        }
 
     # Generate recommendations
-    progress(4, 4, "Generating recommendations...", quiet)
+    progress(5, 5, "Generating recommendations...", quiet)
     result.recommendations = generate_recommendations(result)
 
     if not quiet:
@@ -2431,6 +2583,35 @@ def format_report(result: AnalysisResult) -> str:
     lines.append(f"Status: {result.deployment_status}")
     lines.append("")
 
+    # Collection status table
+    if result.collection_status:
+        lines.append("## Data Collection Status")
+        lines.append("")
+        lines.append("| Source | Status | Details |")
+        lines.append("|--------|--------|---------|")
+        source_labels = {
+            "database_query": "Database Query (SSH)",
+            "metrics_api": "Metrics API",
+            "logs_api": "Logs API",
+            "ha_cluster": "HA Cluster (Patroni)",
+        }
+        for source in ["database_query", "metrics_api", "logs_api", "ha_cluster"]:
+            if source in result.collection_status:
+                info = result.collection_status[source]
+                status = info["status"].upper()
+                details = ""
+                if info.get("error"):
+                    details = info["error"]
+                elif info.get("reason"):
+                    details = info["reason"]
+                elif info.get("lines"):
+                    details = f"{info['lines']} lines collected"
+                elif status == "SUCCESS":
+                    details = "OK"
+                label = source_labels.get(source, source)
+                lines.append(f"| {label} | {status} | {details} |")
+        lines.append("")
+
     # Summary table
     lines.append("## Summary")
     lines.append("")
@@ -2771,16 +2952,23 @@ def format_report(result: AnalysisResult) -> str:
     if result.top_queries:
         lines.append("## Top Queries by Execution Time")
         lines.append("")
-        lines.append("| Query | Calls | Total (min) | Mean (ms) | Cache Hit % | Temp R/W |")
-        lines.append("|-------|-------|-------------|-----------|-------------|----------|")
-        for t in result.top_queries[:10]:
-            query = t.get('query', '')[:40]
+        lines.append("| Query | Calls | Total (min) | Mean (ms) | Min/Max (ms) | Stddev | Rows/Call | Cache Hit % | Temp R/W | Plan (ms) | I/O Time (ms) |")
+        lines.append("|-------|-------|-------------|-----------|--------------|--------|-----------|-------------|----------|-----------|---------------|")
+        for t in result.top_queries[:15]:
+            query = t.get('query', '')[:50]
             cache_pct = t.get('cache_hit_pct')
             cache_str = f"{cache_pct}%" if cache_pct is not None else "-"
             temp_r = t.get('temp_blks_read', 0)
             temp_w = t.get('temp_blks_written', 0)
             temp_str = f"{temp_r:,}/{temp_w:,}" if (temp_r or temp_w) else "-"
-            lines.append(f"| {query}... | {t.get('calls', '')} | {t.get('total_min', '')} | {t.get('mean_ms', '')} | {cache_str} | {temp_str} |")
+            min_max = f"{t.get('min_ms', '-')}/{t.get('max_ms', '-')}"
+            stddev = t.get('stddev_ms', '-')
+            rows_per_call = t.get('rows_per_call', '-')
+            plan_ms = t.get('mean_plan_ms', '-')
+            blk_read = float(t.get('blk_read_time_ms', 0) or 0)
+            blk_write = float(t.get('blk_write_time_ms', 0) or 0)
+            io_time = f"{blk_read + blk_write:.0f}" if (blk_read + blk_write) > 0 else "-"
+            lines.append(f"| {query}... | {t.get('calls', '')} | {t.get('total_min', '')} | {t.get('mean_ms', '')} | {min_max} | {stddev} | {rows_per_call} | {cache_str} | {temp_str} | {plan_ms} | {io_time} |")
         lines.append("")
 
     # Long-running queries
@@ -3011,13 +3199,25 @@ def main():
                        help="Suppress progress messages")
     parser.add_argument("--skip-logs", action="store_true",
                        help="Skip log fetching for faster analysis")
+    parser.add_argument("--step", choices=["ssh-test", "query", "logs", "metrics"],
+                       help="Run a single collection step for debugging")
+    parser.add_argument("--project-id", help="Project ID (bypasses railway link)")
+    parser.add_argument("--environment-id", help="Environment ID (bypasses railway link)")
+    parser.add_argument("--service-id", help="Service ID (bypasses railway link)")
 
     args = parser.parse_args()
+
+    # Single-step debugging mode
+    if args.step:
+        return run_single_step(args)
 
     # Run analysis
     if args.db_type == "postgres":
         result = analyze_postgres(args.service, timeout=args.timeout, quiet=args.quiet,
-                                  skip_logs=args.skip_logs)
+                                  skip_logs=args.skip_logs,
+                                  project_id=args.project_id,
+                                  environment_id=args.environment_id,
+                                  service_id=args.service_id)
     else:
         print(f"Error: {args.db_type} analysis not yet implemented", file=sys.stderr)
         return 1
@@ -3029,6 +3229,64 @@ def main():
         print(format_report(result))
 
     return 0
+
+
+def run_single_step(args) -> int:
+    """Run a single collection step for debugging."""
+    service = args.service
+    _init_context(args)
+    environment_id = _ctx.environment_id
+    service_id = _ctx.service_id
+
+    if args.step == "ssh-test":
+        print(f"Testing SSH to service: {service}", file=sys.stderr)
+        code, stdout, stderr = run_ssh_query(service, "echo ok", timeout=15)
+        print(f"Exit code: {code}")
+        print(f"Stdout: {stdout.strip()}")
+        if stderr:
+            print(f"Stderr: {stderr.strip()}")
+        return 0 if (code == 0 and "ok" in stdout) else 1
+
+    elif args.step == "query":
+        print(f"Running analysis query on: {service}", file=sys.stderr)
+        query = build_analysis_query()
+        code, stdout, stderr = run_psql_query_safe(service, query, timeout=args.timeout)
+        print(f"Exit code: {code}")
+        if code == 0 and stdout:
+            try:
+                data = json.loads(stdout.strip())
+                print(json.dumps(data, indent=2))
+            except json.JSONDecodeError:
+                print(f"Raw output:\n{stdout}")
+        else:
+            print(f"Error: {stderr or stdout}")
+        return code
+
+    elif args.step == "logs":
+        print(f"Fetching logs for: {service}", file=sys.stderr)
+        logs = get_recent_logs(service, lines=LOG_LINES_DEFAULT,
+                               environment_id=environment_id,
+                               service_id=service_id)
+        print(f"Lines fetched: {len(logs)}")
+        for line in logs:
+            print(line)
+        return 0
+
+    elif args.step == "metrics":
+        print(f"Fetching metrics for: {service}", file=sys.stderr)
+        if environment_id and service_id:
+            metrics = get_all_metrics_from_api(environment_id, service_id)
+            if metrics:
+                print(json.dumps(metrics, indent=2))
+            else:
+                print("Metrics API returned no data")
+                return 1
+        else:
+            print("Missing environment_id or service_id from railway config")
+            return 1
+        return 0
+
+    return 1
 
 
 if __name__ == "__main__":
