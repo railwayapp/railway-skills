@@ -51,22 +51,31 @@ scripts/railway-api.sh \
 
 Use the `production` environment by default. If multiple non-PR environments exist and the user hasn't specified one, ask which environment to analyze.
 
-If no URL is provided and you must discover context, then `railway status --json` is acceptable as a fallback.
+**If no URL is provided**, the user's request is the source of truth. Use this decision table:
+
+| What the user provided | Action |
+|------------------------|--------|
+| Service name + environment name | Proceed — intent is clear. Resolve IDs via API. |
+| Service name only (no environment) | Run `railway status --json` as a hint; confirm: "Do you mean `<service>` in `<project>` / `<env>`?" — only proceed on confirmation |
+| Raw UUID(s) | Resolve to human-readable names via API, then confirm before running |
+| Vague request ("analyze my database", "check postgres") | Ask: "Which service and environment should I analyze?" — do not act on the linked context silently |
+| No context at all | Ask: "Which project, service, and environment?" — do NOT run `railway link` |
+
+`railway status --json` is a hint to form a specific question, not a trigger to act without confirmation.
 
 ## Database Type Detection and Script Selection
 
 | Database Type | Script |
 |---------------|--------|
-| PostgreSQL | `scripts/analyze-postgres.py --type postgres` |
-| MySQL | `scripts/analyze-mysql.py --type mysql` |
-| Redis | `scripts/analyze-redis.py --type redis` |
-| MongoDB | `scripts/analyze-mongo.py --type mongo` |
+| PostgreSQL | `scripts/analyze-postgres.py` |
+| MySQL | `scripts/analyze-mysql.py` |
+| Redis | `scripts/analyze-redis.py` |
+| MongoDB | `scripts/analyze-mongo.py` |
 
 **All scripts share the same CLI interface** (use the script name from the table above):
 ```bash
 python3 scripts/analyze-<script>.py \
   --service <name> \
-  --type <type> \
   --json \
   --project-id <project-id> \
   --environment-id <env-id> \
@@ -229,7 +238,7 @@ Pass project, environment, and service IDs directly — no `railway link` needed
 ```bash
 # From plugins/railway/skills/use-railway directory:
 # Use the script name from the "Database Type Detection" table above
-python3 scripts/analyze-postgres.py --service <name> --type postgres --json \
+python3 scripts/analyze-postgres.py --service <name> --json \
   --project-id <project-id> --environment-id <env-id> --service-id <service-id>
 ```
 
@@ -262,7 +271,7 @@ Match the environment name (case-insensitive) to get the `environmentId`.
 
 ```bash
 # Use the script name from the "Database Type Detection" table above
-python3 scripts/analyze-postgres.py --service <name> --type postgres \
+python3 scripts/analyze-postgres.py --service <name> \
   --project-id <pid> --environment-id <eid> --service-id <sid> \
   --step ssh-test    # Test SSH connectivity
   --step query       # Run only the database query

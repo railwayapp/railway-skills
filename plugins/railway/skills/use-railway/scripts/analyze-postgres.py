@@ -13,9 +13,9 @@ Produces a comprehensive report covering:
 - Recommendations
 
 Usage:
-    analyze-postgres.py --service <name> --type postgres
-    analyze-postgres.py --service <name> --type postgres --deep
-    analyze-postgres.py --service <name> --type postgres --json
+    analyze-postgres.py --service <name>
+    analyze-postgres.py --service <name> --deep
+    analyze-postgres.py --service <name> --json
 """
 
 import argparse
@@ -2990,9 +2990,6 @@ def main():
     )
 
     parser.add_argument("--service", required=True, help="Service name")
-    parser.add_argument("--type", dest="db_type", required=True,
-                       choices=["postgres", "redis", "mysql", "mongodb"],
-                       help="Database type")
     parser.add_argument("--json", action="store_true",
                        help="Output as JSON")
     parser.add_argument("--timeout", type=int, default=300,
@@ -3016,16 +3013,12 @@ def main():
         return run_single_step(args)
 
     # Run analysis
-    if args.db_type == "postgres":
-        result = analyze_postgres(args.service, timeout=args.timeout, quiet=args.quiet,
-                                  skip_logs=args.skip_logs,
-                                  metrics_hours=min(args.metrics_hours, 168),
-                                  project_id=args.project_id,
-                                  environment_id=args.environment_id,
-                                  service_id=args.service_id)
-    else:
-        print(f"Error: {args.db_type} analysis not yet implemented", file=sys.stderr)
-        return 1
+    result = analyze_postgres(args.service, timeout=args.timeout, quiet=args.quiet,
+                              skip_logs=args.skip_logs,
+                              metrics_hours=min(args.metrics_hours, 168),
+                              project_id=args.project_id,
+                              environment_id=args.environment_id,
+                              service_id=args.service_id)
 
     # Output
     if args.json:

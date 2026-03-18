@@ -14,9 +14,9 @@ Produces a comprehensive report covering:
 - Recommendations
 
 Usage:
-    analyze-mongo.py --service <name> --type mongo
-    analyze-mongo.py --service <name> --type mongo --json
-    analyze-mongo.py --service <name> --type mongo --step ssh-test
+    analyze-mongo.py --service <name>
+    analyze-mongo.py --service <name> --json
+    analyze-mongo.py --service <name> --step ssh-test
 """
 
 import argparse
@@ -1531,9 +1531,6 @@ def main():
     )
 
     parser.add_argument("--service", required=True, help="Service name")
-    parser.add_argument("--type", dest="db_type", required=True,
-                        choices=["mongo"],
-                        help="Database type (must be 'mongo')")
     parser.add_argument("--json", action="store_true",
                         help="Output as JSON")
     parser.add_argument("--timeout", type=int, default=300,

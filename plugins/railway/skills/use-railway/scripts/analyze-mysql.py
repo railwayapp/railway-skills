@@ -14,9 +14,9 @@ Produces a comprehensive report covering:
 - Recommendations
 
 Usage:
-    analyze-mysql.py --service <name> --type mysql
-    analyze-mysql.py --service <name> --type mysql --json
-    analyze-mysql.py --service <name> --type mysql --step ssh-test
+    analyze-mysql.py --service <name>
+    analyze-mysql.py --service <name> --json
+    analyze-mysql.py --service <name> --step ssh-test
 """
 
 import argparse
@@ -1197,9 +1197,6 @@ def main():
     )
 
     parser.add_argument("--service", required=True, help="Service name")
-    parser.add_argument("--type", dest="db_type", required=True,
-                        choices=["mysql"],
-                        help="Database type (must be mysql)")
     parser.add_argument("--json", action="store_true",
                         help="Output as JSON")
     parser.add_argument("--timeout", type=int, default=60,

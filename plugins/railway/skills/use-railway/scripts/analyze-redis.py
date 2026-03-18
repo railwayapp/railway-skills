@@ -14,9 +14,9 @@ Produces a comprehensive report covering:
 - Recommendations
 
 Usage:
-    analyze-redis.py --service <name> --type redis
-    analyze-redis.py --service <name> --type redis --json
-    analyze-redis.py --service <name> --type redis --step ssh-test
+    analyze-redis.py --service <name>
+    analyze-redis.py --service <name> --json
+    analyze-redis.py --service <name> --step ssh-test
 """
 
 import argparse
@@ -163,7 +163,7 @@ def extract_keyspace(info: Dict[str, str]) -> Tuple[List[Dict[str, Any]], int]:
     databases: List[Dict[str, Any]] = []
     total_keys = 0
     for key, value in info.items():
-        if not key.startswith("db"):
+        if not re.match(r'^db\d+$', key):
             continue
         # Parse keys=X,expires=Y,avg_ttl=Z
         parts = {}
@@ -291,17 +291,18 @@ def parse_bigkeys(raw: str) -> List[Dict[str, Any]]:
     """Parse redis-cli --bigkeys output into structured entries.
 
     Looks for lines like:
-      Biggest string found 'cache:render:page/dashboard' has 2145832 bytes
-      Biggest hash found 'user:sessions' has 14291 fields
-      Biggest list found 'queue:notifications' has 8402 items
-      Biggest set found 'tags:all' has 291 members
-      Biggest zset found 'leaderboard:global' has 10042 members
-      Biggest stream found 'events:main' has 5012 entries
+      Biggest string found "cache:render:page/dashboard" has 2145832 bytes
+      Biggest hash found "user:sessions" has 14291 fields
+      Biggest list found "queue:notifications" has 8402 items
+      Biggest set found "tags:all" has 291 members
+      Biggest zset found "leaderboard:global" has 10042 members
+      Biggest stream found "events:main" has 5012 entries
     """
     entries: List[Dict[str, Any]] = []
-    # Match: Biggest <type> found '<key>' has <count> <unit>
+    # Match: Biggest <type> found "<key>" has <count> <unit>
+    # Redis 8+ uses double quotes; older versions used single quotes
     pattern = re.compile(
-        r"Biggest\s+(\w+)\s+found\s+'([^']+)'\s+has\s+([\d,]+)\s+(\w+)",
+        r'Biggest\s+(\w+)\s+found\s+["\']([^"\']+)["\']\s+has\s+([\d,]+)\s+(\w+)',
         re.IGNORECASE,
     )
     for line in raw.splitlines():
@@ -1082,9 +1083,6 @@ def main():
     )
 
     parser.add_argument("--service", required=True, help="Service name")
-    parser.add_argument("--type", dest="db_type", required=True,
-                       choices=["redis"],
-                       help="Database type")
     parser.add_argument("--json", action="store_true",
                        help="Output as JSON")
     parser.add_argument("--timeout", type=int, default=300,
