@@ -19,22 +19,9 @@ It cannot be run with piped input - the user must confirm directly.
 import argparse
 import sys
 import re
-from typing import Tuple, List
+from typing import List
 
-from dal import run_railway_command, info, error, confirm_with_user
-
-
-def run_ssh_query(service: str, query: str, timeout: int = 60) -> Tuple[int, str]:
-    """Run a psql query via railway ssh and return (returncode, output)."""
-    query = " ".join(query.split())
-    command = f'''PAGER='' psql $DATABASE_URL -P pager=off -t -A -c "{query}"'''
-    escaped_command = command.replace("'", "'\"'\"'")
-    args = ["ssh", "--service", service, "--", f"sh -c '{escaped_command}'"]
-
-    code, stdout, stderr = run_railway_command(args, timeout)
-    if code != 0:
-        return code, stderr or stdout
-    return 0, stdout.strip()
+from dal import run_psql_query, info, error, confirm_with_user
 
 
 def parse_preload_libraries(value: str) -> List[str]:
@@ -76,7 +63,7 @@ be automated. The user must confirm the action directly.
 
     # Step 1: Check current shared_preload_libraries
     info("Checking current shared_preload_libraries...")
-    code, output = run_ssh_query(service, "SHOW shared_preload_libraries")
+    code, output = run_psql_query(service, "SHOW shared_preload_libraries")
     if code != 0:
         error(f"Failed to query shared_preload_libraries: {output}")
 
@@ -96,7 +83,7 @@ be automated. The user must confirm the action directly.
 
     # Step 2: Check if extension is already installed
     info("Checking if pg_stat_statements extension is installed...")
-    code, output = run_ssh_query(service, "SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'")
+    code, output = run_psql_query(service, "SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'")
 
     extension_exists = code == 0 and output.strip() == "1"
 
@@ -132,7 +119,7 @@ be automated. The user must confirm the action directly.
     # Step 3: Install extension
     if needs_install:
         info("Installing pg_stat_statements extension...")
-        code, output = run_ssh_query(service, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
+        code, output = run_psql_query(service, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
         if code != 0:
             error(f"Failed to install extension: {output}")
         info("Extension installed")
@@ -152,7 +139,7 @@ be automated. The user must confirm the action directly.
 
         info(f"Setting shared_preload_libraries to: {', '.join(existing_libs)}")
 
-        code, output = run_ssh_query(service, alter_query)
+        code, output = run_psql_query(service, alter_query)
         if code != 0:
             error(f"Failed to configure shared_preload_libraries: {output}")
         info("shared_preload_libraries configured")

@@ -25,7 +25,7 @@ import json
 from typing import Tuple, List, Optional, Dict, Any
 from dataclasses import dataclass
 
-from dal import run_railway_command, info, error, confirm_with_user
+from dal import run_psql_query, info, error, confirm_with_user
 
 
 @dataclass
@@ -37,24 +37,11 @@ class Extension:
     comment: str
 
 
-def run_ssh_query(service: str, query: str, timeout: int = 60) -> Tuple[int, str]:
-    """Run a psql query via railway ssh and return (returncode, output)."""
-    query = " ".join(query.split())
-    command = f'''PAGER='' psql $DATABASE_URL -P pager=off -t -A -c "{query}"'''
-    escaped_command = command.replace("'", "'\"'\"'")
-    args = ["ssh", "--service", service, "--", f"sh -c '{escaped_command}'"]
-
-    code, stdout, stderr = run_railway_command(args, timeout)
-    if code != 0:
-        return code, stderr or stdout
-    return 0, stdout.strip()
-
-
 def list_extensions(service: str, json_output: bool = False) -> List[Extension]:
     """List all available and installed extensions."""
     # Query available extensions
     available_query = "SELECT name, default_version, comment FROM pg_available_extensions ORDER BY name"
-    code, output = run_ssh_query(service, available_query)
+    code, output = run_psql_query(service, available_query)
     if code != 0:
         error(f"Failed to query available extensions: {output}")
 
@@ -72,7 +59,7 @@ def list_extensions(service: str, json_output: bool = False) -> List[Extension]:
 
     # Query installed extensions
     installed_query = "SELECT extname, extversion FROM pg_extension"
-    code, output = run_ssh_query(service, installed_query)
+    code, output = run_psql_query(service, installed_query)
     if code != 0:
         error(f"Failed to query installed extensions: {output}")
 
@@ -137,7 +124,7 @@ def get_extension_dependencies(service: str, extension: str) -> List[str]:
         WHERE pev.name = '{extension}' AND pev.requires IS NOT NULL
         ORDER BY dependency
     """
-    code, output = run_ssh_query(service, query)
+    code, output = run_psql_query(service, query)
     if code != 0:
         return []
 
@@ -160,7 +147,7 @@ def get_extension_dependents(service: str, extension: str) -> List[str]:
             AND ref_e.extname = '{extension}'
         ORDER BY dependent_extension
     """
-    code, output = run_ssh_query(service, query)
+    code, output = run_psql_query(service, query)
     if code != 0:
         return []
 
@@ -174,7 +161,7 @@ def get_extension_dependents(service: str, extension: str) -> List[str]:
 def is_extension_installed(service: str, extension: str) -> Tuple[bool, Optional[str]]:
     """Check if extension is installed, return (installed, version)."""
     query = f"SELECT extversion FROM pg_extension WHERE extname = '{extension}'"
-    code, output = run_ssh_query(service, query)
+    code, output = run_psql_query(service, query)
     if code == 0 and output.strip():
         return True, output.strip()
     return False, None
@@ -183,7 +170,7 @@ def is_extension_installed(service: str, extension: str) -> Tuple[bool, Optional
 def is_extension_available(service: str, extension: str) -> bool:
     """Check if extension is available in the image."""
     query = f"SELECT 1 FROM pg_available_extensions WHERE name = '{extension}'"
-    code, output = run_ssh_query(service, query)
+    code, output = run_psql_query(service, query)
     return code == 0 and output.strip() == "1"
 
 
@@ -217,7 +204,7 @@ def install_extension(service: str, extension: str, version: Optional[str] = Non
     query += " CASCADE"  # Auto-install dependencies
 
     info(f"Installing extension '{extension}'...")
-    code, output = run_ssh_query(service, query)
+    code, output = run_psql_query(service, query)
     if code != 0:
         error(f"Failed to install extension: {output}")
 
@@ -255,7 +242,7 @@ def uninstall_extension(service: str, extension: str) -> bool:
     # Uninstall
     query = f'DROP EXTENSION IF EXISTS "{extension}"'
     info(f"Uninstalling extension '{extension}'...")
-    code, output = run_ssh_query(service, query)
+    code, output = run_psql_query(service, query)
     if code != 0:
         error(f"Failed to uninstall extension: {output}")
 
@@ -278,7 +265,7 @@ def extension_info(service: str, extension: str, json_output: bool = False):
 
     # Get info
     query = f"SELECT name, default_version, comment FROM pg_available_extensions WHERE name = '{extension}'"
-    code, output = run_ssh_query(service, query)
+    code, output = run_psql_query(service, query)
     if code != 0:
         error(f"Failed to get extension info: {output}")
 

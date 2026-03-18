@@ -176,6 +176,20 @@ def run_ssh_query(service: str, command: str, timeout: int = 60,
     return last_code, last_stdout, last_stderr
 
 
+def run_psql_query(service: str, query: str, timeout: int = 60) -> Tuple[int, str]:
+    """Run a psql query via railway ssh and return (returncode, output).
+
+    Normalizes query whitespace and suppresses psql warnings (e.g. collation
+    version mismatch) that would otherwise pollute stdout.
+    """
+    query = " ".join(query.split())
+    command = f'''PAGER='' psql $DATABASE_URL -P pager=off -t -A -c "{query}" 2>/dev/null'''
+    code, stdout, stderr = run_ssh_query(service, command, timeout)
+    if code != 0:
+        return code, stderr or stdout
+    return 0, stdout
+
+
 def get_railway_status() -> Optional[Dict[str, Any]]:
     """Get environment and service IDs from Railway config file.
 

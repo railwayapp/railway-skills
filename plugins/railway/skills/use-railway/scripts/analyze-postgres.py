@@ -33,7 +33,7 @@ from dataclasses import dataclass, field, asdict
 import dal
 from dal import (
     LOG_LINES_DEFAULT, ProgressTimer, RailwayContext,
-    _init_context, progress, run_railway_command, run_ssh_query,
+    _init_context, progress, run_railway_command, run_ssh_query, run_psql_query,
     get_railway_status, get_deployment_status,
     get_all_metrics_from_api, _analyze_window, _build_metrics_history,
     get_recent_logs,
@@ -87,18 +87,6 @@ class AnalysisResult:
     errors: List[str] = field(default_factory=list)
     recommendations: List[Dict[str, str]] = field(default_factory=list)
 
-
-
-def run_psql_query(service: str, query: str, timeout: int = 60) -> Tuple[int, str]:
-    """Run a psql query and return (returncode, output)."""
-    # Normalize query whitespace
-    query = " ".join(query.split())
-    # 2>/dev/null suppresses psql warnings (e.g., collation version mismatch) that pollute stdout
-    command = f'''PAGER='' psql $DATABASE_URL -P pager=off -t -A -c "{query}" 2>/dev/null'''
-    code, stdout, stderr = run_ssh_query(service, command, timeout)
-    if code != 0:
-        return code, stderr or stdout
-    return 0, stdout
 
 
 def run_psql_query_safe(service: str, query: str, timeout: int = 60) -> Tuple[int, str, str]:
