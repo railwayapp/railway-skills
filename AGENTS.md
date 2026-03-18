@@ -24,7 +24,7 @@ References:
 | Ship code or manage releases | `references/deploy.md` | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
 | Change configuration | `references/configure.md` | Environments, variables, config patches, domains, networking |
 | Check health or debug failures | `references/operate.md` | Status, logs, metrics, build/runtime triage, recovery |
-| Analyze databases | `references/analyze-db.md` | SSH access, database introspection, analysis patterns — directs to DB-specific ref |
+| Analyze databases | `references/analyze-db.md` | Database introspection and performance analysis — directs to DB-specific ref |
 | Request from API, docs, or community | `references/request.md` | GraphQL mutations, metrics queries, Central Station, official docs |
 
 ## Architecture
