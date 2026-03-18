@@ -104,7 +104,7 @@ For anything beyond quick operations, load the reference that matches the user's
 
 | Intent | Reference | Use for |
 |---|---|---|
-| **Analyze a database** ("analyze \<url\>", "analyze db", "analyze database", "analyze service", "introspect", "check my postgres/redis/mysql/mongo") | [analyze-db.md](references/analyze-db.md) + DB-specific ref | SSH access, database introspection, performance analysis. Load analyze-db.md first, then the DB-specific reference: [analyze-db-postgres.md](references/analyze-db-postgres.md), [analyze-db-mysql.md](references/analyze-db-mysql.md), [analyze-db-redis.md](references/analyze-db-redis.md), or [analyze-db-mongo.md](references/analyze-db-mongo.md). **This takes priority over the status/operate routes when a Railway URL to a database service is provided alongside "analyze".** |
+| **Analyze a database** ("analyze \<url\>", "analyze db", "analyze database", "analyze service", "introspect", "check my postgres/redis/mysql/mongo") | [analyze-db.md](references/analyze-db.md) | SSH access, database introspection, performance analysis. analyze-db.md directs you to the DB-specific reference. **This takes priority over the status/operate routes when a Railway URL to a database service is provided alongside "analyze".** |
 | Create or connect resources | [setup.md](references/setup.md) | Projects, services, databases, buckets, templates, workspaces |
 | Ship code or manage releases | [deploy.md](references/deploy.md) | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
 | Change configuration | [configure.md](references/configure.md) | Environments, variables, config patches, domains, networking |
