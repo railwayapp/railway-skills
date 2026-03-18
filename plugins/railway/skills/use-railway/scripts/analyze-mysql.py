@@ -1029,6 +1029,11 @@ def analyze_mysql(service: str, timeout: int = 60, quiet: bool = False,
         ssh_code, ssh_stdout, ssh_stderr = run_ssh_query(service, "echo ok", timeout=attempt_timeout)
         if ssh_code == 0 and "ok" in ssh_stdout:
             ssh_available = True
+            if not quiet:
+                for line in ssh_stderr.splitlines():
+                    if line.startswith("Using SSH key:"):
+                        print(f"        {line}", file=sys.stderr, flush=True)
+                        break
             break
         if not quiet:
             remaining = len(ssh_attempts) - attempt

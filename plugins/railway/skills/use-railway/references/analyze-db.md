@@ -96,26 +96,34 @@ Common options across all scripts:
 
 ### When database_query failed — SSH key errors
 
-If the error contains `"No SSH keys found"` or `"SSH key registration required"`, the user needs to set up native SSH before analysis can proceed. Show the exact error from `collection_status` (it names the key and fingerprint), then present the fix based on which error was returned:
+If the error contains `"No SSH keys found"` or `"SSH key registration required"`, handle it proactively — don't just tell the user to fix it themselves.
 
-**If error contains `"Key found but not registered"`** (key exists locally, just not registered):
-```
-SSH introspection requires a registered SSH key. Your key is not registered yet.
+**If error contains `"Key found but not registered"` or `"No SSH keys found"`:**
 
-Run one of these to register it:
-- `railway ssh keys add` — register your local key
-- `railway ssh keys github` — import from GitHub instead
-```
+Run these two commands to understand what's available:
 
-**If error contains `"No SSH keys found"`** (no local key at all):
-```
-SSH introspection requires an SSH key. You don't have one yet.
-
-1. Generate: `ssh-keygen -t ed25519`
-2. Register: `railway ssh keys add`
+```bash
+railway ssh keys          # list keys already registered with Railway
+ls ~/.ssh/*.pub 2>/dev/null  # list local public keys
 ```
 
-Once the user has registered a key (confirm with `railway ssh keys`), re-run the analysis.
+Then present the user with their options and ask which to use:
+
+```
+SSH introspection needs a registered key. Here's what I found:
+
+Registered with Railway: <list from `railway ssh keys`, or "none">
+Local keys available:    <list from ~/.ssh/*.pub, or "none">
+
+Options:
+  1. Register a local key — `railway ssh keys add` (uses your default key)
+  2. Import from GitHub  — `railway ssh keys github`
+  3. Generate a new key  — `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_railway`
+
+Which would you like to do?
+```
+
+Once the user chooses and the key is registered, re-run the full analysis.
 
 ### When database_query failed — other SSH errors
 
