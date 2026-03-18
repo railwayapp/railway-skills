@@ -125,6 +125,15 @@ Which would you like to do?
 
 Once the user chooses and the key is registered, re-run the full analysis.
 
+### When database_query failed — CLI outdated or missing
+
+If the error contains `"--native SSH flag is not supported"` or `"Railway CLI not found"`, the script detected an unrecoverable CLI problem. Tell the user directly:
+
+- **Outdated CLI:** "Your Railway CLI doesn't support native SSH. Update it: `npm i -g @railway/cli@latest` or `brew upgrade railway`"
+- **Missing CLI:** "Railway CLI not installed. Install it: `npm i -g @railway/cli` or `brew install railway`"
+
+Then ask if they'd like to proceed with a partial analysis (metrics + logs only) while they update, or wait until the CLI is fixed and re-run the full analysis.
+
 ### When database_query failed — other SSH errors
 
 This means SSH could not reach the database or the query failed. You have NO connection stats, NO cache hit ratios, NO vacuum health, NO query performance data. All those fields will be null/empty.

@@ -121,6 +121,27 @@ def run_railway_command(args: List[str], timeout: int = 30) -> Tuple[int, str, s
         return 127, "", "railway CLI not found"
 
 
+def _cli_fatal_error(returncode: int, stderr: str) -> Optional[str]:
+    """Return a friendly error string if the CLI itself is broken, else None.
+
+    These errors are unrecoverable — retrying won't help.
+    """
+    if returncode == 127 or "railway CLI not found" in stderr:
+        return (
+            "Railway CLI not found. "
+            "Install it with: npm i -g @railway/cli  "
+            "or  brew install railway"
+        )
+    lower = stderr.lower()
+    if "unknown flag" in lower or "flag provided but not defined" in lower:
+        return (
+            "Railway CLI is outdated — the --native SSH flag is not supported. "
+            "Update it with: npm i -g @railway/cli@latest  "
+            "or  brew upgrade railway"
+        )
+    return None
+
+
 def run_ssh_query(service: str, command: str, timeout: int = 60,
                   max_attempts: int = 3) -> Tuple[int, str, str]:
     """Run a command via railway ssh, retrying up to max_attempts times.
@@ -130,7 +151,8 @@ def run_ssh_query(service: str, command: str, timeout: int = 60,
     and redirects all work without an explicit sh -c wrapper.
 
     Retries on non-zero exit code or empty stdout (covers transient errors
-    like 'exec request failed on channel 0').
+    like 'exec request failed on channel 0').  Never retries when the CLI
+    itself is missing or outdated — those errors are unrecoverable.
     """
     flags = _ctx.ssh_flags()
     # Only pass --service <name> if context didn't already provide --service <id>
@@ -142,6 +164,9 @@ def run_ssh_query(service: str, command: str, timeout: int = 60,
         last_code, last_stdout, last_stderr = run_railway_command(args, timeout)
         if last_code == 0 and last_stdout.strip():
             return last_code, last_stdout, last_stderr
+        fatal = _cli_fatal_error(last_code, last_stderr)
+        if fatal:
+            return last_code, last_stdout, fatal
         if attempt < max_attempts:
             print(
                 f"        SSH attempt {attempt}/{max_attempts} failed "
