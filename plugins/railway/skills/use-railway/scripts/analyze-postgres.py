@@ -37,6 +37,7 @@ from dal import (
     get_railway_status, get_deployment_status,
     get_all_metrics_from_api, _analyze_window, _build_metrics_history,
     get_recent_logs,
+    _trend_indicator,
 )
 
 
@@ -2304,28 +2305,6 @@ def sum_index_sizes(indexes: List[Dict[str, Any]]) -> str:
     elif total_bytes >= 1024:
         return f"{total_bytes / 1024:.1f} KB"
     return f"{total_bytes} bytes"
-
-
-def _trend_indicator(metrics_history: Optional[Dict[str, Any]], metric_name: str) -> str:
-    """Return a compact trend string like ' (^ +15.2% 24h)' for use in summary rows."""
-    if not metrics_history:
-        return ""
-    # Multi-window format: pick the shortest window (prefer 24h)
-    windows = metrics_history.get("windows", {})
-    window_data = windows.get("24h") or next(iter(windows.values()), None) if windows else None
-    if not window_data or not window_data.get("metrics"):
-        return ""
-    m = window_data["metrics"].get(metric_name)
-    if not m or "trend" not in m:
-        return ""
-    t = m["trend"]
-    direction = t.get("direction", "stable")
-    change = t.get("change_pct", 0)
-    window_label = "24h" if "24h" in windows else next(iter(windows), "")
-    arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "")
-    if direction == "stable":
-        return f" ({arrow} stable {window_label})"
-    return f" ({arrow} {change:+.1f}% {window_label})"
 
 
 def format_report(result: AnalysisResult) -> str:

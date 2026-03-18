@@ -37,6 +37,7 @@ from dal import (
     get_railway_status, get_deployment_status,
     get_all_metrics_from_api, _analyze_window, _build_metrics_history,
     get_recent_logs,
+    _safe_int, _safe_float, _format_uptime,
 )
 
 
@@ -333,26 +334,6 @@ def parse_bigkeys(raw: str) -> List[Dict[str, Any]]:
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
-def _safe_int(val: Optional[str]) -> int:
-    """Safely convert a string to int, returning 0 on failure."""
-    if val is None:
-        return 0
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return 0
-
-
-def _safe_float(val: Optional[str]) -> float:
-    """Safely convert a string to float, returning 0.0 on failure."""
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return 0.0
-
-
 def _format_number(n: int) -> str:
     """Format a large number with K/M/B suffixes."""
     if n >= 1_000_000_000:
@@ -362,23 +343,6 @@ def _format_number(n: int) -> str:
     if n >= 1_000:
         return f"{n / 1_000:.1f}K"
     return f"{n:,}"
-
-
-def _format_uptime(seconds: int) -> str:
-    """Format uptime seconds into a human-readable string."""
-    if seconds <= 0:
-        return "N/A"
-    days = seconds // 86400
-    hours = (seconds % 86400) // 3600
-    minutes = (seconds % 3600) // 60
-    parts = []
-    if days > 0:
-        parts.append(f"{days}d")
-    if hours > 0:
-        parts.append(f"{hours}h")
-    if minutes > 0 and days == 0:
-        parts.append(f"{minutes}m")
-    return " ".join(parts) if parts else "< 1m"
 
 
 def _format_duration(seconds: int) -> str:

@@ -516,6 +516,89 @@ def _build_metrics_history(raw_series: Dict[str, List[Dict[str, Any]]], hours: i
     return {"windows": windows}
 
 
+def info(msg: str) -> None:
+    """Print an [INFO] message to stdout."""
+    print(f"[INFO] {msg}")
+
+
+def error(msg: str) -> None:
+    """Print an [ERROR] message to stderr and exit."""
+    print(f"[ERROR] {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def confirm_with_user(prompt: str) -> bool:
+    """Get confirmation directly from the terminal.
+
+    Reads from /dev/tty to ensure it's an actual user at a terminal,
+    not piped input. This prevents automated scripts from bypassing confirmation.
+    """
+    try:
+        with open('/dev/tty', 'r') as tty:
+            print(prompt, end=' ', flush=True)
+            response = tty.readline().strip().lower()
+            return response in ('y', 'yes')
+    except (OSError, IOError):
+        print("\n[ERROR] This command requires interactive terminal confirmation.")
+        print("It cannot be run with piped input or in non-interactive mode.")
+        print("Please run this command directly in a terminal.")
+        return False
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    """Safely convert a value to int, returning default on failure."""
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely convert a value to float, returning default on failure."""
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _format_uptime(seconds: int) -> str:
+    """Format uptime seconds into a human-readable string."""
+    if seconds <= 0:
+        return "N/A"
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    minutes = (seconds % 3600) // 60
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 and days == 0:
+        parts.append(f"{minutes}m")
+    return " ".join(parts) if parts else "< 1m"
+
+
+def _trend_indicator(metrics_history: Optional[Dict[str, Any]], metric_name: str) -> str:
+    """Return a compact trend string like ' (^ +15.2% 24h)' for use in summary rows."""
+    if not metrics_history:
+        return ""
+    windows = metrics_history.get("windows", {})
+    window_data = windows.get("24h") or next(iter(windows.values()), None) if windows else None
+    if not window_data or not window_data.get("metrics"):
+        return ""
+    m = window_data["metrics"].get(metric_name)
+    if not m or "trend" not in m:
+        return ""
+    t = m["trend"]
+    direction = t.get("direction", "stable")
+    change = t.get("change_pct", 0)
+    window_label = "24h" if "24h" in windows else next(iter(windows), "")
+    arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "")
+    if direction == "stable":
+        return f" ({arrow} stable {window_label})"
+    return f" ({arrow} {change:+.1f}% {window_label})"
+
+
 def get_recent_logs(service: str, lines: int = LOG_LINES_DEFAULT,
                     environment_id: Optional[str] = None,
                     service_id: Optional[str] = None) -> List[str]:

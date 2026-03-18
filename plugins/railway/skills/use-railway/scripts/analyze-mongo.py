@@ -36,6 +36,7 @@ from dal import (
     get_railway_status, get_deployment_status,
     get_all_metrics_from_api, _analyze_window, _build_metrics_history,
     get_recent_logs,
+    _trend_indicator,
 )
 
 
@@ -461,34 +462,6 @@ def _fmt_us(microseconds: float) -> str:
     elif microseconds >= 1_000:
         return f"{microseconds / 1_000:.1f}ms"
     return f"{microseconds:.0f}us"
-
-
-def _trend_indicator(metrics_history: Optional[Dict[str, Any]], metric_name: str) -> str:
-    """Return a compact trend string for summary rows."""
-    if not metrics_history:
-        return ""
-    # Multi-window format: look for 24h window first, then first available
-    windows = metrics_history.get("windows", {})
-    mh = None
-    window_label = ""
-    for label in ("24h", *windows.keys()):
-        w = windows.get(label, {})
-        if w.get("metrics", {}).get(metric_name):
-            mh = w["metrics"]
-            window_label = label
-            break
-    if not mh:
-        return ""
-    m = mh.get(metric_name)
-    if not m or "trend" not in m:
-        return ""
-    t = m["trend"]
-    direction = t.get("direction", "stable")
-    change = t.get("change_pct", 0)
-    arrow = {"increasing": "^", "decreasing": "v", "stable": "~"}.get(direction, "")
-    if direction == "stable":
-        return f" ({arrow} stable {window_label})"
-    return f" ({arrow} {change:+.1f}% {window_label})"
 
 
 # ---------------------------------------------------------------------------

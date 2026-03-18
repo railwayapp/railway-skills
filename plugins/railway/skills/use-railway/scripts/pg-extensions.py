@@ -20,11 +20,12 @@ They cannot be run with piped input - the user must confirm directly.
 """
 
 import argparse
-import subprocess
 import sys
 import json
 from typing import Tuple, List, Optional, Dict, Any
 from dataclasses import dataclass
+
+from dal import run_railway_command, info, error, confirm_with_user
 
 
 @dataclass
@@ -34,22 +35,6 @@ class Extension:
     default_version: str
     installed_version: Optional[str]
     comment: str
-
-
-def run_railway_command(args: List[str], timeout: int = 30) -> Tuple[int, str, str]:
-    """Run a railway CLI command and return (returncode, stdout, stderr)."""
-    try:
-        result = subprocess.run(
-            ["railway"] + args,
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
-        return result.returncode, result.stdout, result.stderr
-    except subprocess.TimeoutExpired:
-        return 124, "", "Command timed out"
-    except FileNotFoundError:
-        return 127, "", "railway CLI not found"
 
 
 def run_ssh_query(service: str, query: str, timeout: int = 60) -> Tuple[int, str]:
@@ -63,36 +48,6 @@ def run_ssh_query(service: str, query: str, timeout: int = 60) -> Tuple[int, str
     if code != 0:
         return code, stderr or stdout
     return 0, stdout.strip()
-
-
-def info(msg: str):
-    print(f"[INFO] {msg}")
-
-
-def error(msg: str):
-    print(f"[ERROR] {msg}", file=sys.stderr)
-    sys.exit(1)
-
-
-def confirm_with_user(prompt: str) -> bool:
-    """
-    Get confirmation directly from the terminal.
-
-    This reads from /dev/tty to ensure it's an actual user at a terminal,
-    not a piped input. This prevents automated scripts from bypassing confirmation.
-    """
-    try:
-        # Try to read directly from terminal (bypasses stdin piping)
-        with open('/dev/tty', 'r') as tty:
-            print(prompt, end=' ', flush=True)
-            response = tty.readline().strip().lower()
-            return response in ('y', 'yes')
-    except (OSError, IOError):
-        # /dev/tty not available (not running in a terminal)
-        print("\n[ERROR] This command requires interactive terminal confirmation.")
-        print("It cannot be run with piped input or in non-interactive mode.")
-        print("Please run this command directly in a terminal.")
-        return False
 
 
 def list_extensions(service: str, json_output: bool = False) -> List[Extension]:

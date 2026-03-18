@@ -37,6 +37,7 @@ from dal import (
     get_railway_status, get_deployment_status,
     get_all_metrics_from_api, _analyze_window, _build_metrics_history,
     get_recent_logs,
+    _safe_int, _safe_float, _format_uptime, _trend_indicator,
 )
 
 
@@ -299,20 +300,6 @@ def _split_mysql_resultsets_multi(output: str, header_keys: List[str]) -> List[s
 # Parse collected data into result
 # ---------------------------------------------------------------------------
 
-def _safe_int(val: Any, default: int = 0) -> int:
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return default
-
-
-def _safe_float(val: Any, default: float = 0.0) -> float:
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return default
-
-
 def parse_mysql_data(data: Dict[str, Any], result: MySQLAnalysisResult) -> None:
     """Transform raw MySQL data into structured result sections."""
     gs = data.get("global_status", {})
@@ -515,20 +502,6 @@ def parse_mysql_data(data: Dict[str, Any], result: MySQLAnalysisResult) -> None:
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
-def _format_uptime(seconds: int) -> str:
-    days = seconds // 86400
-    hours = (seconds % 86400) // 3600
-    minutes = (seconds % 3600) // 60
-    parts = []
-    if days > 0:
-        parts.append(f"{days}d")
-    if hours > 0:
-        parts.append(f"{hours}h")
-    if minutes > 0 and days == 0:
-        parts.append(f"{minutes}m")
-    return " ".join(parts) if parts else "< 1m"
-
-
 def _format_count(n: int) -> str:
     """Format large numbers with K/M/G suffix."""
     if n >= 1_000_000_000:
@@ -557,28 +530,6 @@ def _status_ok_warn_crit(value: float, warn_threshold: float, crit_threshold: fl
     if value >= warn_threshold:
         return "WARN"
     return "OK"
-
-
-def _trend_indicator(metrics_history: Optional[Dict[str, Any]], metric_name: str) -> str:
-    """Get a compact trend indicator for a metric."""
-    if not metrics_history:
-        return ""
-    # Multi-window format: get metrics from the first window
-    windows = metrics_history.get("windows", {})
-    if not windows:
-        return ""
-    first_window = next(iter(windows.values()), {})
-    m = first_window.get("metrics", {}).get(metric_name)
-    if not m or "trend" not in m:
-        return ""
-    t = m["trend"]
-    direction = t.get("direction", "stable")
-    pct = t.get("change_pct", 0)
-    if direction == "increasing":
-        return f" (trending up {pct:+.1f}%)"
-    if direction == "decreasing":
-        return f" (trending down {pct:+.1f}%)"
-    return ""
 
 
 # ---------------------------------------------------------------------------
