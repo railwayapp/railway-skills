@@ -14,7 +14,7 @@ For common analysis patterns (output structure, collection status handling, perf
 - **Command Stats:** per-command call count, avg latency, total time (sorted by calls)
 - **Keyspace:** per-database key count, expires, avg TTL
 - **Slow Log:** count via `SLOWLOG LEN` + actual entries via `SLOWLOG GET 20` (command, duration, timestamp)
-- **Biggest Keys:** via `redis-cli --bigkeys` — largest key per type (string, hash, list, set, zset, stream)
+- **Biggest Keys:** via `redis-cli --bigkeys` — runs **remotely over SSH** on the Railway service, not locally
 
 **Via Railway API:** Same infrastructure metrics (disk, CPU, memory, network with **7d and 24h trends**).
 
@@ -110,12 +110,14 @@ Compare: "Memory increasing in 24h but stable over 7d → temporary spike, not a
 
 Do NOT show cpu_limit/memory_limit columns or utilization %. Railway auto-scales — these limits are just the ceiling. See [analyze-db.md](analyze-db.md) autoscale rules.
 
-### Partial Report (SSH failed, only Metrics + Logs)
+### Partial Report (Introspection failed, only Metrics + Logs)
 
-When SSH fails, you have NO Redis INFO data — all overview, memory, throughput, cache, persistence, command stats, and keyspace fields will be null/empty.
+When introspection fails, you have NO Redis INFO data — all overview, memory, throughput, cache, persistence, command stats, and keyspace fields will be null/empty.
+
+**NEVER suggest running `redis-cli` without pointing to the remote Railway service host.** There is no local Redis instance — all redis-cli commands must target the Railway service. If you cannot connect, the fix is to restore remote access (see `analyze-db.md`), not to run commands locally.
 
 **You MUST:**
-1. State clearly: "Redis introspection failed — SSH could not connect"
+1. State clearly: "Redis introspection failed — could not connect to the service"
 2. Show collection status errors
 3. Show ONLY infrastructure metrics and log analysis — do not show empty stat card sections
 4. Do NOT produce recommendations based on null Redis metrics
