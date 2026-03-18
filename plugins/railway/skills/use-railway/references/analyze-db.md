@@ -6,16 +6,29 @@ You are a database performance expert. The script collects raw data - your job i
 
 **Don't just report metrics. Analyze them.**
 
-## Context: URL First, Never Trust CLI Linking
+## Context Resolution
 
-When a Railway URL is provided, **extract IDs directly from the URL**. Do NOT run `railway status --json` to discover context — it returns whatever project is locally linked, which is usually a different project.
+The user's request is the source of truth. Use this decision table:
+
+| What the user provided | Action |
+|------------------------|--------|
+| Railway URL | Extract IDs directly from the URL — do NOT run `railway status --json` |
+| Service name + environment name | Proceed — intent is clear. Resolve IDs via API. |
+| Service name only (no environment) | Find the service by name via API. If multiple matches exist across projects, ask: "Which project do you mean?" Otherwise confirm: "Do you mean `<service>` in `<project>` / `<env>`?" — only proceed on confirmation |
+| Raw UUID(s) | Resolve to human-readable names via API, then confirm before running |
+| Vague request ("analyze my database", "check postgres") | Run `railway status --json` to see what's linked. If it's a database service, confirm: "Do you mean `<service>` in `<project>` / `<env>`?". If it's not a database service or nothing is linked, ask: "Which service and environment should I analyze?" |
+| No context at all | List workspaces (`railway whoami --json`), then projects (`railway project list --json`), then environments and services for the chosen project, narrowing down until you have a specific service and environment |
+
+`railway status --json` is a hint to form a specific question, not a trigger to act without confirmation.
+
+**When the user provides a Railway URL**, extract IDs directly from it:
 
 ```
 https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>?environmentId=<ENV_ID>
 https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>/database?environmentId=<ENV_ID>
 ```
 
-With the project, service, and environment IDs from the URL, query the API for the service name and database type in a **single call**:
+Then query the API for the service name and database type in a **single call**:
 
 ```bash
 scripts/railway-api.sh \
@@ -50,18 +63,6 @@ scripts/railway-api.sh \
 ```
 
 Use the `production` environment by default. If multiple non-PR environments exist and the user hasn't specified one, ask which environment to analyze.
-
-**If no URL is provided**, the user's request is the source of truth. Use this decision table:
-
-| What the user provided | Action |
-|------------------------|--------|
-| Service name + environment name | Proceed — intent is clear. Resolve IDs via API. |
-| Service name only (no environment) | Run `railway status --json` as a hint; confirm: "Do you mean `<service>` in `<project>` / `<env>`?" — only proceed on confirmation |
-| Raw UUID(s) | Resolve to human-readable names via API, then confirm before running |
-| Vague request ("analyze my database", "check postgres") | Ask: "Which service and environment should I analyze?" — do not act on the linked context silently |
-| No context at all | Ask: "Which project, service, and environment?" — do NOT run `railway link` |
-
-`railway status --json` is a hint to form a specific question, not a trigger to act without confirmation.
 
 ## Database Type Detection and Script Selection
 
