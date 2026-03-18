@@ -520,15 +520,7 @@ def generate_recommendations(result: RedisAnalysisResult) -> List[Dict[str, str]
                 "message": f"Blocked clients detected ({blocked}). Check for blocking operations (BLPOP, BRPOP, etc.).",
             })
 
-    # maxmemory not set
-    if result.memory:
-        maxmem = result.memory.get("maxmemory", 0)
-        if maxmem == 0:
-            recs.append({
-                "severity": "warning",
-                "category": "memory",
-                "message": "No maxmemory limit set. Redis will use all available memory. Set maxmemory to prevent OOM.",
-            })
+    # maxmemory not set — on Railway this is expected; autoscaling handles growth
 
     # RDB save failure
     if result.persistence:
@@ -627,7 +619,7 @@ def format_report(result: RedisAnalysisResult) -> str:
         if maxmem > 0:
             lines.append(f"| Max Memory | {m.get('maxmemory_human', _format_bytes_human(maxmem))} | |")
         else:
-            lines.append("| Max Memory | not set | WARN |")
+            lines.append("| Max Memory | Unlimited | |")
 
         lines.append(f"| Eviction Policy | {m.get('maxmemory_policy', 'N/A')} | |")
         lines.append("")
@@ -878,11 +870,6 @@ def analyze_redis(service: str, timeout: int = 300, quiet: bool = False,
             return ("failed", f"SSH not available: {ssh_stderr or 'connection failed'}", "")
         command = 'timeout 30s redis-cli -h localhost -p 6379 -a "$REDISPASSWORD" --no-auth-warning --raw INFO ALL'
         code, stdout, stderr = run_ssh_query(service, command, timeout=45)
-        if code != 0:
-            # Retry once
-            if not quiet:
-                print(f"        Redis INFO failed ({stderr or 'unknown'}), retrying...", file=sys.stderr, flush=True)
-            code, stdout, stderr = run_ssh_query(service, command, timeout=60)
         if code == 0 and stdout.strip():
             return ("ok", "", stdout)
         return ("failed", stderr or "empty response", stdout)

@@ -55,7 +55,7 @@ class RailwayContext:
 
     def ssh_flags(self) -> List[str]:
         """Return CLI flags for railway ssh."""
-        flags = []
+        flags = ["--native"]
         if self.project_id:
             flags.extend(["--project", self.project_id])
         if self.environment_id:
@@ -121,24 +121,34 @@ def run_railway_command(args: List[str], timeout: int = 30) -> Tuple[int, str, s
         return 127, "", "railway CLI not found"
 
 
-def run_ssh_query(service: str, command: str, timeout: int = 60) -> Tuple[int, str, str]:
-    """Run a command via railway ssh.
+def run_ssh_query(service: str, command: str, timeout: int = 60,
+                  max_attempts: int = 3) -> Tuple[int, str, str]:
+    """Run a command via railway ssh, retrying up to max_attempts times.
 
     Passes the command as a single argument after '--'. Railway ssh
     interprets it through a shell on the remote end, so pipes, env vars,
     and redirects all work without an explicit sh -c wrapper.
 
-    The old code wrapped commands in sh -c '...' as a single string,
-    which broke under subprocess (no shell to split the string into
-    separate argv entries) and also caused railway to eat the first
-    line of stdout.
+    Retries on non-zero exit code or empty stdout (covers transient errors
+    like 'exec request failed on channel 0').
     """
     flags = _ctx.ssh_flags()
     # Only pass --service <name> if context didn't already provide --service <id>
     if not _ctx.service_id:
         flags += ["--service", service]
     args = ["ssh"] + flags + ["--", command]
-    return run_railway_command(args, timeout)
+    last_code, last_stdout, last_stderr = 1, "", ""
+    for attempt in range(1, max_attempts + 1):
+        last_code, last_stdout, last_stderr = run_railway_command(args, timeout)
+        if last_code == 0 and last_stdout.strip():
+            return last_code, last_stdout, last_stderr
+        if attempt < max_attempts:
+            print(
+                f"        SSH attempt {attempt}/{max_attempts} failed "
+                f"({last_stderr.strip() or 'empty response'}), retrying...",
+                file=sys.stderr, flush=True,
+            )
+    return last_code, last_stdout, last_stderr
 
 
 def get_railway_status() -> Optional[Dict[str, Any]]:

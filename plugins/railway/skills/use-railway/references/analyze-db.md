@@ -94,7 +94,30 @@ Common options across all scripts:
 | **error** | error | success | **Logs-only report** — state what logs show, note everything else failed. NO diagnosis. |
 | **error** | **error** | **error** | **Collection failure** — report the errors, do not analyze. |
 
-### When database_query failed
+### When database_query failed — SSH key errors
+
+If the error contains `"No SSH keys found"` or `"SSH key registration required"`, the user needs to set up native SSH before analysis can proceed. Show the exact error from `collection_status` (it names the key and fingerprint), then present the fix based on which error was returned:
+
+**If error contains `"Key found but not registered"`** (key exists locally, just not registered):
+```
+SSH introspection requires a registered SSH key. Your key is not registered yet.
+
+Run one of these to register it:
+- `railway ssh keys add` — register your local key
+- `railway ssh keys github` — import from GitHub instead
+```
+
+**If error contains `"No SSH keys found"`** (no local key at all):
+```
+SSH introspection requires an SSH key. You don't have one yet.
+
+1. Generate: `ssh-keygen -t ed25519`
+2. Register: `railway ssh keys add`
+```
+
+Once the user has registered a key (confirm with `railway ssh keys`), re-run the analysis.
+
+### When database_query failed — other SSH errors
 
 This means SSH could not reach the database or the query failed. You have NO connection stats, NO cache hit ratios, NO vacuum health, NO query performance data. All those fields will be null/empty.
 
@@ -198,7 +221,7 @@ All three IDs come from the URL (see "Context: URL First" above). The service na
 **Options:**
 - `--metrics-hours <N>` — Hours of metrics history to fetch (default: 24, max: 168). Use `--metrics-hours 168` for 7-day trends, `--metrics-hours 1` for recent snapshot.
 
-**SSH retry:** The script automatically retries SSH connectivity up to 3 times with increasing timeouts (30s, 60s, 90s). If the database query itself fails after SSH connects, it retries once. Progress is logged to stderr.
+**SSH retry:** The script automatically retries SSH connectivity up to 3 times with increasing timeouts (30s, 60s, 90s). Each individual SSH command (database query, slowlog, bigkeys, etc.) also retries up to 3 times on failure — covering transient errors like `exec request failed on channel 0`. Progress is logged to stderr.
 
 **Output:** Progress messages go to stderr. JSON results go to stdout. Do not redirect or pipe stderr — just run the command as-is and read the full output.
 
