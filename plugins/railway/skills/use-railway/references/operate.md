@@ -78,6 +78,15 @@ Available measurements: `CPU_USAGE`, `CPU_LIMIT`, `MEMORY_USAGE_GB`, `MEMORY_LIM
 
 Omit `serviceId` and add `"groupBy": ["SERVICE_ID"]` to query all services in the environment at once. Get the environment and service IDs from `railway status --json`.
 
+## Database inspection
+
+For database-level metrics and introspection, always use the analysis scripts. See [analyze-db.md](analyze-db.md) for comprehensive database analysis including:
+
+- Deep Postgres analysis (pg_stat_statements, vacuum health, index health, cache hit ratios)
+- HA cluster checks (Patroni, etcd, HAProxy)
+- Redis, MySQL, and MongoDB introspection
+- Combined analysis via `scripts/analyze-<type>.py` (postgres, mysql, redis, mongo)
+
 ## Failure triage
 
 When something is broken, classify the failure first. The fix depends on the class.

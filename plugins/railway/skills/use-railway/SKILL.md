@@ -7,7 +7,7 @@ description: >
   and query Railway docs. Use this skill whenever the user mentions Railway,
   deployments, services, environments, buckets, object storage, build failures,
   or infrastructure operations, even if they don't say "Railway" explicitly.
-allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*)
+allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*), Bash(python3:*)
 ---
 
 # Use Railway
@@ -25,6 +25,31 @@ Railway organizes infrastructure in a hierarchy:
 
 Most CLI commands operate on the linked project/environment/service context. Use `railway status --json` to see the context, and `--project`, `--environment`, `--service` flags to override.
 
+## Parsing Railway URLs
+
+Users often paste Railway dashboard URLs. Extract IDs before doing anything else:
+
+```
+https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>?environmentId=<ENV_ID>
+https://railway.com/project/<PROJECT_ID>/service/<SERVICE_ID>
+```
+
+The URL always contains `projectId` and `serviceId`. It may contain `environmentId` as a query parameter. If the environment ID is missing and the user specifies an environment by name (e.g., "production"), resolve it:
+
+```bash
+scripts/railway-api.sh \
+  'query getProject($id: String!) {
+    project(id: $id) {
+      environments { edges { node { id name } } }
+    }
+  }' \
+  '{"id": "<PROJECT_ID>"}'
+```
+
+Match the environment name (case-insensitive) to get the `environmentId`.
+
+**Prefer passing explicit IDs** to CLI commands (`--project`, `--environment`, `--service`) and scripts (`--project-id`, `--environment-id`, `--service-id`) instead of running `railway link`. This avoids modifying global state and is faster.
+
 ## Preflight
 
 Before any mutation, verify context:
@@ -33,10 +58,13 @@ Before any mutation, verify context:
 command -v railway                # CLI installed
 railway whoami --json             # authenticated
 railway --version                 # check CLI version
-railway status --json             # linked project/environment/service
 ```
 
-If the CLI is missing, guide the user to install it. 
+**Context resolution — URL IDs always win:**
+- If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.
+- If no URL is given, fall back to `railway status --json` for the linked project/environment/service.
+
+If the CLI is missing, guide the user to install it.
 
 ```bash
 bash <(curl -fsSL cli.new) # Shell script (macOS, Linux, Windows via WSL)
@@ -44,7 +72,7 @@ brew install railway # Homebrew (macOS)
 npm i -g @railway/cli # npm (macOS, Linux, Windows). Requires Node.js version 16 or higher.
 ```
 
-If not authenticated, run `railway login`. If not linked, run `railway link --project <id-or-name>`.
+If not authenticated, run `railway login`. If not linked and no URL was provided, run `railway link --project <id-or-name>`.
 
 If a command is not recognized (for example, `railway environment edit`), the CLI may be outdated. Upgrade with:
 
@@ -76,6 +104,7 @@ For anything beyond quick operations, load the reference that matches the user's
 
 | Intent | Reference | Use for |
 |---|---|---|
+| **Analyze a database** ("analyze \<url\>", "analyze db", "analyze database", "analyze service", "introspect", "check my postgres/redis/mysql/mongo") | [analyze-db.md](references/analyze-db.md) | Database introspection and performance analysis. analyze-db.md directs you to the DB-specific reference. **This takes priority over the status/operate routes when a Railway URL to a database service is provided alongside "analyze".** |
 | Create or connect resources | [setup.md](references/setup.md) | Projects, services, databases, buckets, templates, workspaces |
 | Ship code or manage releases | [deploy.md](references/deploy.md) | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
 | Change configuration | [configure.md](references/configure.md) | Environments, variables, config patches, domains, networking |
@@ -91,6 +120,25 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 3. Resolve context before mutation. Know which project, environment, and service you're acting on.
 4. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
 5. After mutations, verify the result with a read-back command.
+
+## User-only commands (NEVER execute directly)
+
+These commands modify database state and require the user to run them directly in their terminal. **Do NOT execute these with Bash. Instead, show the command and ask the user to run it.**
+
+| Command | Why user-only |
+|---------|---------------|
+| `python3 scripts/enable-pg-stats.py --service <name>` | Modifies shared_preload_libraries, may restart database |
+| `python3 scripts/pg-extensions.py --service <name> install <ext>` | Installs database extension |
+| `python3 scripts/pg-extensions.py --service <name> uninstall <ext>` | Removes database extension |
+| `ALTER SYSTEM SET ...` | Changes PostgreSQL configuration |
+| `DROP EXTENSION ...` | Removes database extension |
+| `CREATE EXTENSION ...` | Installs database extension |
+
+When these operations are needed:
+1. Explain what the command does and any side effects (e.g., restart required)
+2. Show the exact command the user should run
+3. Wait for user confirmation that they ran it
+4. Verify the result with a read-only query
 
 ## Composition patterns
 
