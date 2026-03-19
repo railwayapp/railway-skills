@@ -19,7 +19,7 @@ All in ONE operation (no additional queries needed):
 - Current/max/available counts
 - States (active, idle, idle_in_transaction)
 - By application name
-- By age (buckets: <1min, 1-5min, 5-30min, 30min-1hr, 1-24hr, >24hr)
+- By age (buckets: <1min, 1-5min, 5-60min, 1-24hr, >24hr)
 - Oldest connection age
 
 **Memory & Configuration:**
