@@ -87,6 +87,35 @@ For database-level metrics and introspection, always use the analysis scripts. S
 - Redis, MySQL, and MongoDB introspection
 - Combined analysis via `scripts/analyze-<type>.py` (postgres, mysql, redis, mongo)
 
+## Shell access
+
+Use `railway ssh` to open an interactive shell or run a one-off command inside a running container:
+
+```bash
+railway ssh --service <service>                          # interactive shell
+railway ssh --service <service> -- <command>             # run a single command and exit
+```
+
+Examples:
+
+```bash
+railway ssh --service api -- env | sort                  # inspect runtime environment
+railway ssh --service worker -- ls -la /app              # inspect filesystem
+railway ssh --service db -- psql -U postgres -c '\l'     # run a DB query inside the container
+```
+
+**`railway run` is not `railway ssh`.** `railway run` executes a command **locally** with the
+service's environment variables injected — it does not run inside the remote container. Use
+`railway ssh` when you need to execute a command inside the container itself.
+
+SSH requires an SSH key registered with Railway:
+
+```bash
+railway ssh keys          # list registered keys
+railway ssh keys add      # register your default local key (~/.ssh/id_*.pub)
+railway ssh keys github   # import keys from GitHub
+```
+
 ## Failure triage
 
 When something is broken, classify the failure first. The fix depends on the class.
@@ -171,5 +200,5 @@ Always verify after fixing. Don't assume the redeploy succeeded.
 
 ## Validated against
 
-- Docs: [status.md](https://docs.railway.com/cli/status), [logs.md](https://docs.railway.com/cli/logs), [observability.md](https://docs.railway.com/observability), [observability/logs.md](https://docs.railway.com/observability/logs), [observability/metrics.md](https://docs.railway.com/observability/metrics)
-- CLI source: [status.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/status.rs), [logs.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/logs.rs), [deployment.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/deployment.rs), [redeploy.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/redeploy.rs)
+- Docs: [status.md](https://docs.railway.com/cli/status), [logs.md](https://docs.railway.com/cli/logs), [observability.md](https://docs.railway.com/observability), [observability/logs.md](https://docs.railway.com/observability/logs), [observability/metrics.md](https://docs.railway.com/observability/metrics), [ssh.md](https://docs.railway.com/guides/ssh)
+- CLI source: [status.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/status.rs), [logs.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/logs.rs), [deployment.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/deployment.rs), [redeploy.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/redeploy.rs), [ssh/mod.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/ssh/mod.rs), [ssh/keys.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/ssh/keys.rs)

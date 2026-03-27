@@ -92,6 +92,8 @@ railway service status --all --json                      # all services in curre
 railway variable list --service <svc> --json             # list variables
 railway variable set KEY=value --service <svc>           # set a variable
 railway logs --service <svc> --lines 200 --json          # recent logs
+railway ssh --service <svc>                              # interactive shell inside running container
+railway ssh --service <svc> -- <command>                 # run single command inside container
 railway up --detach -m "<summary>"                       # deploy current directory
 railway bucket list --json                               # list buckets in current environment
 railway bucket info --bucket <name> --json               # bucket storage and object count
@@ -120,6 +122,7 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 3. Resolve context before mutation. Know which project, environment, and service you're acting on.
 4. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
 5. After mutations, verify the result with a read-back command.
+6. **`railway run` executes locally, not remotely.** It runs a command in your local shell with the service's environment variables injected. To execute a command inside the remote container, use `railway ssh --service <svc> -- <command>` instead.
 
 ## User-only commands (NEVER execute directly)
 
