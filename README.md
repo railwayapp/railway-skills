@@ -31,6 +31,16 @@ This repo ships one installable skill:
 
 `use-railway` is route-first. Intent routing is defined in `SKILL.md`, and execution details are split into action-oriented references.
 
+## Execution model
+
+`use-railway` prefers Railway's Remote MCP Server when the current client exposes Railway MCP tools.
+
+- Prefer `railway-agent` for non-trivial Railway tasks.
+- Use direct Railway MCP tools for narrow actions when available.
+- Fall back to the local Railway CLI, GraphQL helper, and analysis scripts for local-only workflows or unsupported MCP cases.
+
+If Railway MCP is not available, the skill now suggests adding `https://mcp.railway.com` before continuing with the local fallback path.
+
 ## Workflow coverage
 
 `use-railway` covers:

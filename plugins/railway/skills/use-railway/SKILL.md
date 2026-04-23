@@ -25,6 +25,23 @@ Railway organizes infrastructure in a hierarchy:
 
 Most CLI commands operate on the linked project/environment/service context. Use `railway status --json` to see the context, and `--project`, `--environment`, `--service` flags to override.
 
+## Tool selection
+
+When Railway MCP tools are available in the current client, prefer the Remote MCP Server over the local CLI.
+
+Execution order:
+
+1. Use `railway-agent` for complex or multi-step Railway work: deployments, debugging, log analysis, service configuration, recovery, and ambiguous operational requests.
+2. Use direct Railway MCP tools for narrow, single-purpose actions when an exact tool exists.
+3. Fall back to the local Railway CLI, `scripts/railway-api.sh`, and the analysis scripts when Railway MCP is unavailable or the task requires local execution.
+
+If Railway MCP tools are not available, briefly suggest adding the Railway remote MCP server before falling back:
+
+- URL: `https://mcp.railway.com`
+- Docs: `https://docs.railway.com/ai/remote-mcp-server`
+
+Keep this suggestion brief and non-blocking. Continue with the CLI or scripts when they can complete the task. Suggest MCP more strongly for complex or investigative requests, since `railway-agent` is the best default entry point for those workflows.
+
 ## Parsing Railway URLs
 
 Users often paste Railway dashboard URLs. Extract IDs before doing anything else:
@@ -52,7 +69,12 @@ Match the environment name (case-insensitive) to get the `environmentId`.
 
 ## Preflight
 
-Before any mutation, verify context:
+Before any mutation, choose the execution path first:
+
+- If Railway MCP tools are available, prefer them and skip CLI install/auth checks unless you later need the fallback path.
+- If Railway MCP tools are not available, suggest adding the remote MCP server and then verify the local CLI path.
+
+For the CLI fallback path, verify context:
 
 ```bash
 command -v railway                # CLI installed
@@ -81,6 +103,8 @@ railway upgrade
 ```
 
 ## Common quick operations
+
+When Railway MCP is available, direct MCP tools or `railway-agent` may be a better fit than these commands. Use the CLI commands below when you need the local fallback path.
 
 These are frequent enough to handle without loading a reference:
 
@@ -115,11 +139,13 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 
 ## Execution rules
 
-1. Prefer Railway CLI. Fall back to `scripts/railway-api.sh` for operations the CLI doesn't expose.
-2. Use `--json` output where available for reliable parsing.
-3. Resolve context before mutation. Know which project, environment, and service you're acting on.
-4. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
-5. After mutations, verify the result with a read-back command.
+1. If Railway MCP tools are available, prefer them over local CLI.
+2. Default to `railway-agent` for complex or multi-step Railway tasks. Use direct MCP tools only when they cleanly match a narrow request.
+3. Fall back to Railway CLI. Fall back to `scripts/railway-api.sh` for operations the CLI doesn't expose.
+4. Use `--json` output where available for reliable parsing.
+5. Resolve context before mutation. Know which project, environment, and service you're acting on.
+6. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
+7. After mutations, verify the result with a read-back command.
 
 ## User-only commands (NEVER execute directly)
 

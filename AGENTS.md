@@ -29,16 +29,28 @@ References:
 
 ## Architecture
 
-### CLI first
+### Remote MCP first
 
-Use Railway CLI for context-aware operations.
+When Railway MCP tools are available in the current client, prefer the Railway Remote MCP Server.
+
+- Remote MCP URL: `https://mcp.railway.com`
+- Docs: `https://docs.railway.com/ai/remote-mcp-server`
+- Prefer `railway-agent` for complex or multi-step Railway work.
+- Use direct MCP tools for narrow, single-purpose actions when they exist.
+
+If Railway MCP tools are not available, briefly suggest adding the remote MCP server, then continue with the local fallback path when appropriate.
+
+### CLI fallback
+
+Use Railway CLI for local or unsupported operations.
 
 - Command: `railway`
 - Prefer `--json` output where available.
+- Best for local deploys, repo-aware operations, and workflows that depend on local scripts or SSH-backed analysis.
 
 ### GraphQL API
 
-Use GraphQL for operations the CLI doesn't expose.
+Use GraphQL for operations the CLI doesn't expose, or when the local fallback path needs data the current MCP surface does not provide directly.
 
 - Endpoint: `https://backboard.railway.com/graphql/v2`
 - API helper: `plugins/railway/skills/use-railway/scripts/railway-api.sh`
@@ -65,6 +77,7 @@ When editing this plugin:
 - Keep `SKILL.md` focused on routing, preflight, composition, and common operations.
 - Keep references organized by information type (setup, deploy, configure, operate, api).
 - Keep references action-oriented with reasoning. Explain why, not only what.
+- Keep remote MCP as the preferred execution path, but preserve CLI and scripts as fallback material.
 - Keep CLI behavior claims aligned with Railway docs and CLI source.
 - Keep a single "Validated against" block at the end of each reference.
 - Bump `version` in `plugins/railway/.claude-plugin/plugin.json` in any PR that changes skill content. Claude Code uses this version to detect updates — without a bump, users will not receive changes.

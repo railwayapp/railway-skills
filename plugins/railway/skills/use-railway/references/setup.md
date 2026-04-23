@@ -2,6 +2,8 @@
 
 Create, link, and organize Railway projects, services, databases, and workspaces.
 
+If Railway MCP is available, prefer `railway-agent` for setup workflows that span multiple steps. Use the CLI commands below when Railway MCP is unavailable or when the task requires the local fallback path.
+
 ## Projects
 
 ### List and discover

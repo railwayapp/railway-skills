@@ -2,6 +2,8 @@
 
 Manage environments, variables, service config, domains, and networking.
 
+If Railway MCP is available, prefer `railway-agent` for multi-step configuration work. Use the CLI commands below when Railway MCP is unavailable or when you need explicit local fallback behavior.
+
 ## Environments
 
 ### List and switch

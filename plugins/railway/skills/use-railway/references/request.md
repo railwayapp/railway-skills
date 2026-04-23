@@ -2,6 +2,8 @@
 
 Official documentation and community endpoints. GraphQL operations for things the CLI doesn't expose.
 
+If Railway MCP is available, prefer it for operational work and use this reference when you need docs, community evidence, or a local GraphQL fallback the current MCP surface does not cover directly.
+
 ## Official documentation
 
 Primary sources for authoritative Railway information:

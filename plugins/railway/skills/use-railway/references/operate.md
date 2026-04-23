@@ -2,6 +2,8 @@
 
 Check health, read logs, query metrics, and troubleshoot failures.
 
+If Railway MCP is available, prefer `railway-agent` for operational investigations and recovery work. Use the CLI and API commands below when Railway MCP is unavailable or when you need the local fallback path.
+
 ## Health snapshot
 
 Start broad, then narrow:

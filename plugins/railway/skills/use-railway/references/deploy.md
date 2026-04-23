@@ -2,6 +2,8 @@
 
 Ship code, manage releases, and configure builds.
 
+If Railway MCP is available, prefer `railway-agent` for deploy and release workflows that require investigation or multiple coordinated changes. Use the CLI commands below when Railway MCP is unavailable or when the task depends on local source deployment.
+
 ## Deploy code
 
 ### Standard deploy
