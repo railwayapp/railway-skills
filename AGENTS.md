@@ -29,9 +29,18 @@ References:
 
 ## Architecture
 
-### CLI first
+### Tool routing
 
-Use Railway CLI for context-aware operations.
+Use the right Railway operation path for the execution context.
+
+- Remote MCP (`https://mcp.railway.com`) is preferred for agent-native platform operations when configured: account/project/service discovery, deployment status, bounded logs, simple redeploys, simple project creation, and complex workflows through `railway-agent`.
+- Local CLI MCP (`railway mcp`) is preferred when configured and the task benefits from its richer CLI-backed tool surface: variables, domains, service config, templates, metrics, HTTP summaries, buckets, volumes, docs, or deploy-from-directory.
+- Railway CLI (`railway`) is preferred for local-machine workflows: current-directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, and exact command output.
+- GraphQL is the fallback for operations that neither MCP nor CLI exposes.
+
+### Railway CLI
+
+Use Railway CLI for context-aware local operations.
 
 - Command: `railway`
 - Prefer `--json` output where available.
@@ -74,3 +83,4 @@ When editing this plugin:
 - https://code.claude.com/docs/en/skills
 - https://code.claude.com/docs/en/plugins
 - https://agentskills.io/specification
+- https://docs.railway.com/ai/remote-mcp-server
