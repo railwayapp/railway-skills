@@ -26,6 +26,18 @@ Railway organizes infrastructure in a hierarchy:
 
 Most CLI commands operate on the linked project/environment/service context. Use `railway status --json` to see the context, and `--project`, `--environment`, `--service` flags to override.
 
+## Tool routing
+
+Railway has three agent-facing operation paths:
+
+- **Remote MCP** (`https://mcp.railway.com`) is the preferred path when the agent has a Railway MCP server available and the task is a platform operation: account/project/service discovery, deployment state, bounded logs, simple redeploys, simple project creation, or a complex Railway workflow that can be handed to `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
+- **Local CLI MCP** (`railway mcp`) is the preferred MCP path when configured and the task benefits from the richer CLI-backed tool surface: variables, domains, service config, templates, metrics, HTTP summaries, buckets, volumes, docs, or deploy-from-directory.
+- **Railway CLI** (`railway`) is the preferred path when the task depends on local machine state: current working directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, or exact command output.
+
+If both remote MCP and local CLI MCP are available, prefer remote MCP for OAuth-scoped platform operations that do not need local files or CLI state. Use the local CLI or local CLI MCP when the workflow needs the current repo, local credentials, SSH, database scripts, or a command not exposed by remote MCP.
+
+Use `scripts/railway-api.sh` only when neither MCP nor CLI exposes the operation, or when a reference gives a specific GraphQL fallback.
+
 ## Parsing Railway URLs
 
 Users often paste Railway dashboard URLs. Extract IDs before doing anything else:
@@ -53,15 +65,17 @@ Match the environment name (case-insensitive) to get the `environmentId`.
 
 ## Preflight
 
-Before any mutation, verify context:
+Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.2.1" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.2.2" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.1` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+When Railway MCP is available in the agent, prefer MCP reads before shelling out for equivalent platform state. If using the CLI path, run the CLI checks above.
+
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.2` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
@@ -125,7 +139,7 @@ railway agent --thread-id <thread-id>
 
 ## Common quick operations
 
-These are frequent enough to handle without loading a reference:
+These are frequent enough to handle without loading a reference. Use equivalent MCP tools when available; otherwise use the CLI:
 
 ```bash
 railway status --json                                    # current context
@@ -145,7 +159,7 @@ railway bucket credentials --bucket <name> --json        # S3-compatible credent
 When using these commands from the skill, keep the command shape but prefix the Railway invocation with the telemetry env, for example:
 
 ```bash
-RAILWAY_CALLER="skill:use-railway@1.2.1" RAILWAY_AGENT_SESSION="railway-skill-20260508-1234" railway status --json
+RAILWAY_CALLER="skill:use-railway@1.2.2" RAILWAY_AGENT_SESSION="railway-skill-20260508-1234" railway status --json
 ```
 
 ## Routing
@@ -165,11 +179,13 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 
 ## Execution rules
 
-1. Prefer Railway CLI. Fall back to `scripts/railway-api.sh` for operations the CLI doesn't expose.
-2. Use `--json` output where available for reliable parsing.
-3. Resolve context before mutation. Know which project, environment, and service you're acting on.
-4. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
-5. After mutations, verify the result with a read-back command.
+1. Prefer Railway MCP for agent-native platform operations when it is available.
+2. Prefer the local CLI for workflows that need the current repo, local shell, SSH, database scripts, or unsupported MCP coverage.
+3. Fall back to `scripts/railway-api.sh` for operations neither MCP nor CLI exposes.
+4. Use `--json` output where available for reliable parsing.
+5. Resolve context before mutation. Know which project, environment, and service you're acting on.
+6. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
+7. After mutations, verify the result with a read-back command or MCP read.
 
 ## User-only commands (NEVER execute directly)
 
