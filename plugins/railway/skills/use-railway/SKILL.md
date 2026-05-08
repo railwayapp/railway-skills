@@ -67,12 +67,16 @@ Match the environment name (case-insensitive) to get the `environmentId`.
 Before any mutation, verify the tool path and context:
 
 ```bash
+export RAILWAY_CALLER="${RAILWAY_CALLER:-skill:use-railway@1.1.3}"
+export RAILWAY_AGENT_SESSION="${RAILWAY_AGENT_SESSION:-railway-skill-$(date +%s)-$$}"
 command -v railway                # CLI installed
 railway whoami --json             # authenticated
 railway --version                 # check CLI version
 ```
 
 When Railway MCP is available in the agent, prefer MCP reads before shelling out for equivalent platform state. If using the CLI path, run the CLI checks above.
+
+Keep `RAILWAY_CALLER` and `RAILWAY_AGENT_SESSION` exported for Railway CLI calls made while this skill is active. They let Railway correlate skill-assisted CLI actions without adding a separate analytics client to the skill.
 
 **Context resolution — URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.

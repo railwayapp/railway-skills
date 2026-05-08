@@ -44,6 +44,7 @@ Use Railway CLI for context-aware local operations.
 
 - Command: `railway`
 - Prefer `--json` output where available.
+- Skill telemetry: set `RAILWAY_CALLER=skill:use-railway@<plugin-version>` and a stable `RAILWAY_AGENT_SESSION` before Railway CLI calls made from the skill.
 
 ### GraphQL API
 
@@ -51,6 +52,7 @@ Use GraphQL for operations the CLI doesn't expose.
 
 - Endpoint: `https://backboard.railway.com/graphql/v2`
 - API helper: `plugins/railway/skills/use-railway/scripts/railway-api.sh`
+- The API helper attaches `X-Railway-Skill-Id`, `X-Railway-Skill-Version`, and `X-Railway-Agent-Session` headers.
 
 ### API token
 
