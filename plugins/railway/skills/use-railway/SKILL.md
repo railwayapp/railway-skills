@@ -55,14 +55,12 @@ Match the environment name (case-insensitive) to get the `environmentId`.
 Before any mutation, verify context:
 
 ```bash
-export RAILWAY_CALLER="${RAILWAY_CALLER:-skill:use-railway@1.1.2}"
-export RAILWAY_AGENT_SESSION="${RAILWAY_AGENT_SESSION:-railway-skill-$(date +%s)-$$}"
 command -v railway                # CLI installed
-railway whoami --json             # authenticated
+RAILWAY_CALLER="skill:use-railway@1.1.3" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
-Keep `RAILWAY_CALLER` and `RAILWAY_AGENT_SESSION` exported for Railway CLI calls made while this skill is active. They let Railway correlate skill-assisted CLI actions without adding a separate analytics client to the skill.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.1.3` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight just for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution — URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.
@@ -100,6 +98,12 @@ railway up --detach -m "<summary>"                       # deploy current direct
 railway bucket list --json                               # list buckets in current environment
 railway bucket info --bucket <name> --json               # bucket storage and object count
 railway bucket credentials --bucket <name> --json        # S3-compatible credentials
+```
+
+When using these commands from the skill, keep the command shape but prefix the Railway invocation with the telemetry env, for example:
+
+```bash
+RAILWAY_CALLER="skill:use-railway@1.1.3" RAILWAY_AGENT_SESSION="railway-skill-20260508-1234" railway status --json
 ```
 
 ## Routing
