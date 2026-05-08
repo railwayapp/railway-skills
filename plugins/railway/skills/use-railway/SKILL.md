@@ -77,6 +77,7 @@ When Railway MCP is available and the job is a platform-state read, use the matc
 **Context resolution — URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.
 - If no URL is given, fall back to `railway status --json` for the linked project/environment/service.
+- When using MCP tools after resolving local context with `railway status --json`, pass the resolved project, environment, and service IDs explicitly. Do not rely on MCP implicit linked context; MCP may not share the CLI's current working directory link.
 
 If the CLI is missing, guide the user to install it.
 
