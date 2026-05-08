@@ -27,13 +27,13 @@ Most CLI commands operate on the linked project/environment/service context. Use
 
 ## Tool routing
 
-Railway has three agent-facing operation paths:
+Railway has three agent-facing operation paths. Choose the path that matches the job:
 
-- **Remote MCP** (`https://mcp.railway.com`) is the preferred path when the agent has a Railway MCP server available and the task is a platform operation: account/project/service discovery, deployment state, bounded logs, simple redeploys, simple project creation, or a complex Railway workflow that can be handed to `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
-- **Local CLI MCP** (`railway mcp`) is the preferred MCP path when configured and the task benefits from the richer CLI-backed tool surface: variables, domains, service config, templates, metrics, HTTP summaries, buckets, volumes, docs, or deploy-from-directory.
-- **Railway CLI** (`railway`) is the preferred path when the task depends on local machine state: current working directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, or exact command output.
+- **Remote MCP** (`https://mcp.railway.com`): account/project/service discovery, deployment state, bounded logs, simple redeploys, simple project creation, or complex Railway workflows that can be handed to `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
+- **Local CLI MCP** (`railway mcp`): CLI-backed platform operations such as variables, domains, service config, templates, metrics, HTTP summaries, buckets, volumes, docs, or deploy-from-directory.
+- **Railway CLI** (`railway`): workflows that depend on local machine state such as current working directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, or exact command output.
 
-If both remote MCP and local CLI MCP are available, prefer remote MCP for OAuth-scoped platform operations that do not need local files or CLI state. Use the local CLI or local CLI MCP when the workflow needs the current repo, local credentials, SSH, database scripts, or a command not exposed by remote MCP.
+If multiple paths are available, choose the one that preserves the needed context. Remote MCP fits OAuth-scoped platform operations that do not need local files or CLI state. Local CLI MCP or the CLI fit workflows that need the current repo, local credentials, SSH, database scripts, or commands not exposed by remote MCP.
 
 Use `scripts/railway-api.sh` only when neither MCP nor CLI exposes the operation, or when a reference gives a specific GraphQL fallback.
 
@@ -72,7 +72,7 @@ railway whoami --json             # authenticated
 railway --version                 # check CLI version
 ```
 
-When Railway MCP is available in the agent, prefer MCP reads before shelling out for equivalent platform state. If using the CLI path, run the CLI checks above.
+When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
 **Context resolution — URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.
@@ -96,7 +96,7 @@ railway upgrade
 
 ## Common quick operations
 
-These are frequent enough to handle without loading a reference. Use equivalent MCP tools when available; otherwise use the CLI:
+These are frequent enough to handle without loading a reference. Use the matching MCP tool when the job is platform-scoped and the tool is available; otherwise use the CLI:
 
 ```bash
 railway status --json                                    # current context
@@ -129,8 +129,8 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 
 ## Execution rules
 
-1. Prefer Railway MCP for agent-native platform operations when it is available.
-2. Prefer the local CLI for workflows that need the current repo, local shell, SSH, database scripts, or unsupported MCP coverage.
+1. Use Railway MCP for platform operations that match an available MCP tool.
+2. Use the local CLI for workflows that need the current repo, local shell, SSH, database scripts, or unsupported MCP coverage.
 3. Fall back to `scripts/railway-api.sh` for operations neither MCP nor CLI exposes.
 4. Use `--json` output where available for reliable parsing.
 5. Resolve context before mutation. Know which project, environment, and service you're acting on.
