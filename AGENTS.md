@@ -35,7 +35,7 @@ Use Railway CLI for context-aware operations.
 
 - Command: `railway`
 - Prefer `--json` output where available.
-- Skill telemetry: set `RAILWAY_CALLER=skill:use-railway@<plugin-version>` and a stable `RAILWAY_AGENT_SESSION` before Railway CLI calls made from the skill.
+- Skill telemetry: prefix Railway CLI invocations with `RAILWAY_CALLER=skill:use-railway@<plugin-version>` and a stable `RAILWAY_AGENT_SESSION`; do not run separate telemetry-only `export` commands.
 
 ### GraphQL API
 
