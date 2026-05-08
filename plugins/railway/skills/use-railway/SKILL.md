@@ -25,6 +25,18 @@ Railway organizes infrastructure in a hierarchy:
 
 Most CLI commands operate on the linked project/environment/service context. Use `railway status --json` to see the context, and `--project`, `--environment`, `--service` flags to override.
 
+## Tool routing
+
+Railway has three agent-facing operation paths. Choose the path that matches the job:
+
+- **Remote MCP** (`https://mcp.railway.com`): account/project/service discovery, deployment state, bounded logs, simple redeploys, simple project creation, or complex Railway workflows that can be handed to `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
+- **Local CLI MCP** (`railway mcp`): CLI-backed platform operations such as variables, domains, service config, templates, metrics, HTTP summaries, buckets, volumes, docs, or deploy-from-directory.
+- **Railway CLI** (`railway`): workflows that depend on local machine state such as current working directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, or exact command output.
+
+If multiple paths are available, choose the one that preserves the needed context. Remote MCP fits OAuth-scoped platform operations that do not need local files or CLI state. Local CLI MCP or the CLI fit workflows that need the current repo, local credentials, SSH, database scripts, or commands not exposed by remote MCP.
+
+Use `scripts/railway-api.sh` only when neither MCP nor CLI exposes the operation, or when a reference gives a specific GraphQL fallback.
+
 ## Parsing Railway URLs
 
 Users often paste Railway dashboard URLs. Extract IDs before doing anything else:
@@ -52,13 +64,15 @@ Match the environment name (case-insensitive) to get the `environmentId`.
 
 ## Preflight
 
-Before any mutation, verify context:
+Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
 railway whoami --json             # authenticated
 railway --version                 # check CLI version
 ```
+
+When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
 **Context resolution — URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.
@@ -82,7 +96,7 @@ railway upgrade
 
 ## Common quick operations
 
-These are frequent enough to handle without loading a reference:
+These are frequent enough to handle without loading a reference. Use the matching MCP tool when the job is platform-scoped and the tool is available; otherwise use the CLI:
 
 ```bash
 railway status --json                                    # current context
@@ -115,11 +129,13 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 
 ## Execution rules
 
-1. Prefer Railway CLI. Fall back to `scripts/railway-api.sh` for operations the CLI doesn't expose.
-2. Use `--json` output where available for reliable parsing.
-3. Resolve context before mutation. Know which project, environment, and service you're acting on.
-4. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
-5. After mutations, verify the result with a read-back command.
+1. Use Railway MCP for platform operations that match an available MCP tool.
+2. Use the local CLI for workflows that need the current repo, local shell, SSH, database scripts, or unsupported MCP coverage.
+3. Fall back to `scripts/railway-api.sh` for operations neither MCP nor CLI exposes.
+4. Use `--json` output where available for reliable parsing.
+5. Resolve context before mutation. Know which project, environment, and service you're acting on.
+6. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
+7. After mutations, verify the result with a read-back command or MCP read.
 
 ## User-only commands (NEVER execute directly)
 
