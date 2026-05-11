@@ -24,8 +24,9 @@ EOF
   exit 0
 fi
 
-# Auto-approve railway CLI commands
-if [[ "$command" =~ ^railway[[:space:]] ]]; then
+# Auto-approve railway CLI commands, including skill telemetry env prefixes.
+railway_cli_pattern="^[[:space:]]*((RAILWAY_CALLER|RAILWAY_AGENT_SESSION|RAILWAY_SKILL_VERSION)=([^[:space:]\"']+|\"[^\"]*\"|'[^']*')[[:space:]]+)*railway([[:space:]]|$)"
+if [[ "$command" =~ $railway_cli_pattern ]]; then
   cat <<'EOF'
 {
   "hookSpecificOutput": {
