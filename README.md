@@ -8,10 +8,28 @@ This repository packages Railway as a plugin for Claude Code, OpenAI Codex,
 and Cursor. The plugin includes the `use-railway` skill and local MCP
 configuration that runs `railway mcp`.
 
-Install and authenticate the Railway CLI before using the plugin MCP server:
+Install the Railway CLI before using the plugin MCP server.
+
+### Railway agent setup
+
+To configure Railway agent support through the Railway CLI, run:
+
+```bash
+railway setup agent -y
+```
+
+This installs Railway skills, configures the Railway MCP server where
+supported, and checks Railway authentication for detected tools. If you are not
+authenticated, run:
 
 ```bash
 railway login
+```
+
+You can also install the Railway CLI and configure agent support in one step:
+
+```bash
+bash <(curl -fsSL cli.new) --agents -y
 ```
 
 ### Claude Code
@@ -76,22 +94,6 @@ as a team marketplace:
 
 - Plugin manifest: [`plugins/railway/.cursor-plugin/plugin.json`](plugins/railway/.cursor-plugin/plugin.json)
 - Marketplace: [`.cursor-plugin/marketplace.json`](.cursor-plugin/marketplace.json)
-
-### Skills-only install
-
-For tools that support Agent Skills but don't support plugins, install the Railway skill:
-
-```bash
-curl -fsSL railway.com/skills.sh | bash
-```
-
-You can also install via [skills.sh](https://skills.sh):
-
-```bash
-npx skills add railwayapp/railway-skills
-```
-
-Supports Claude Code, OpenAI Codex, OpenCode, Cursor or any coding agent. Run the installer again to update.
 
 ### Railway MCP
 
@@ -159,8 +161,6 @@ railway-skills/
 │               ├── configure.md
 │               ├── operate.md
 │               └── request.md
-├── scripts/
-│   └── install.sh
 ├── .claude-plugin/
 │   └── marketplace.json
 ├── .cursor-plugin/
@@ -182,6 +182,7 @@ railway-skills/
 
 - [Agent Skills Specification](https://agentskills.io/specification)
 - [Railway Docs](https://docs.railway.com)
+- [Railway agent setup](https://docs.railway.com/cli/setup)
 - [Claude Code plugin installation](https://code.claude.com/docs/en/discover-plugins)
 - [Codex plugins and skills](https://openai.com/academy/codex-plugins-and-skills/)
 - [Cursor plugins marketplace](https://github.com/cursor/plugins)
