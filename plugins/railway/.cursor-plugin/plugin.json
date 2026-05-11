@@ -1,0 +1,29 @@
+{
+  "name": "railway",
+  "displayName": "Railway",
+  "description": "Deploy and manage apps, databases, and infrastructure on Railway.",
+  "version": "1.2.0",
+  "author": {
+    "name": "Railway",
+    "email": "contact@railway.com"
+  },
+  "publisher": "Railway",
+  "homepage": "https://docs.railway.com/agents",
+  "repository": "https://github.com/railwayapp/railway-skills",
+  "license": "MIT",
+  "keywords": [
+    "railway",
+    "deployment",
+    "infrastructure",
+    "mcp",
+    "agent-skills"
+  ],
+  "category": "Deployment",
+  "tags": [
+    "mcp",
+    "skills",
+    "railway"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.cursor-plugin/mcp.json"
+}

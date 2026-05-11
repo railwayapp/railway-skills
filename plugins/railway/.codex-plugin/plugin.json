@@ -1,0 +1,42 @@
+{
+  "name": "railway",
+  "version": "1.2.0",
+  "description": "Railway agent tools for projects, services, deployments, and infrastructure.",
+  "author": {
+    "name": "Railway",
+    "email": "contact@railway.com",
+    "url": "https://railway.com"
+  },
+  "homepage": "https://docs.railway.com/agents",
+  "repository": "https://github.com/railwayapp/railway-skills",
+  "license": "MIT",
+  "keywords": [
+    "railway",
+    "deployment",
+    "infrastructure",
+    "mcp",
+    "agent-skills"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Railway",
+    "shortDescription": "Deploy, configure, and operate Railway projects.",
+    "longDescription": "Use Railway agent skills and the local Railway MCP server to manage projects, services, deployments, variables, domains, databases, object storage, logs, and metrics from Codex.",
+    "developerName": "Railway",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP",
+      "Skills"
+    ],
+    "websiteURL": "https://railway.com",
+    "privacyPolicyURL": "https://railway.com/legal/privacy",
+    "termsOfServiceURL": "https://railway.com/legal/terms",
+    "defaultPrompt": [
+      "Check the Railway status for this project.",
+      "Deploy this app to Railway.",
+      "Debug the latest Railway deployment."
+    ],
+    "brandColor": "#0B0D0E"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "railway-skills",
-  "description": "Railway agent skills for Claude Code",
+  "description": "Railway agent skills and MCP plugin marketplace for Claude Code",
   "owner": {
     "name": "Railway",
     "email": "contact@railway.com"
@@ -9,12 +9,13 @@
   "plugins": [
     {
       "name": "railway",
-      "description": "Railway tools for Claude Code - manage projects, services, deployments",
+      "description": "Deploy and manage apps, databases, and infrastructure on Railway.",
       "author": {
         "name": "Railway"
       },
       "source": "./plugins/railway",
-      "category": "productivity"
+      "category": "deployment",
+      "homepage": "https://docs.railway.com/agents"
     }
   ]
 }

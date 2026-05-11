@@ -1,0 +1,17 @@
+{
+  "name": "railway-skills",
+  "owner": {
+    "name": "Railway",
+    "email": "contact@railway.com"
+  },
+  "metadata": {
+    "description": "Railway agent skills and MCP plugin marketplace for Cursor."
+  },
+  "plugins": [
+    {
+      "name": "railway",
+      "source": "plugins/railway",
+      "description": "Deploy and manage apps, databases, and infrastructure on Railway."
+    }
+  ]
+}
