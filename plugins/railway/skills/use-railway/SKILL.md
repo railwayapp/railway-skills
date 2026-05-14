@@ -70,10 +70,10 @@ For Railway CLI calls made while this skill is active, prefix the command with `
 If the CLI is missing, guide the user to install it.
 
 ```bash
-bash <(curl -fsSL cli.new) # Shell script (macOS, Linux, Windows via WSL)
-bash <(curl -fsSL cli.new) --agents -y # Install CLI and configure detected agents
-brew install railway # Homebrew (macOS)
+bash <(curl -fsSL https://railway.com/install.sh) --agents -y # Install CLI and configure detected agents
+bash <(curl -fsSL https://railway.com/install.sh) # Shell script (macOS, Linux, Windows via WSL)
 npm i -g @railway/cli # npm (macOS, Linux, Windows). Requires Node.js version 16 or higher.
+brew install railway # Homebrew (macOS)
 ```
 
 If not authenticated, run `railway login`. If not linked and no URL was provided, run `railway link --project <id-or-name>`.

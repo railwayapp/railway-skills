@@ -33,7 +33,7 @@ railway logs --service <service> --build --lines 200 --json      # build logs
 railway logs --latest --lines 200 --json                         # latest deployment
 ```
 
-`railway logs` streams indefinitely when no bounding flags are given. Always use `--lines`, `--since`, or `--until` to get a bounded fetch. Open streams block execution.
+In an interactive terminal, `railway logs` streams indefinitely when no bounding flags are given. Always use `--lines`, `--since`, or `--until` to get a bounded fetch for agent workflows.
 
 ### Time-bounded queries
 
@@ -90,7 +90,7 @@ Use `--raw` for time-series data points:
 railway metrics --service <service> --raw --cpu --json
 ```
 
-Metric flags can be combined: `--cpu`, `--memory`, `--network`, `--volume`, and `--http`. Use `--watch` only in an interactive terminal. It opens a live TUI and doesn't return until stopped.
+Metric flags can be combined: `--cpu`, `--memory`, `--network`, `--volume`, and `--http`. Use `--watch` only in an interactive terminal; it opens a live TUI and conflicts with `--json` and `--raw`.
 
 For custom grouping or measurements the CLI doesn't expose, use the GraphQL fallback in [request.md](request.md).
 
@@ -194,7 +194,7 @@ railway variable set MISSING_VAR=value --service <service>
 railway redeploy --service <service> --yes
 
 # Verify
-railway service status --service <service> --json
+railway service list --json
 railway logs --service <service> --lines 200 --json
 ```
 

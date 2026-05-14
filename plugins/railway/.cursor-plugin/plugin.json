@@ -1,7 +1,7 @@
 {
   "name": "railway",
   "displayName": "Railway",
-  "description": "Deploy and manage apps, databases, and infrastructure on Railway.",
+  "description": "Use Railway agent skills, Railway Agent, and local or remote MCP to manage projects, services, deployments, and infrastructure from Cursor.",
   "version": "1.2.1",
   "author": {
     "name": "Railway",

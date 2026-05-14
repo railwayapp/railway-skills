@@ -77,7 +77,7 @@ railway logs --service <service> --build --lines 200 --json      # build logs
 railway logs --latest --lines 200 --json                         # latest deployment
 ```
 
-`railway logs` streams indefinitely when no bounding flags are given. An open stream blocks execution and never returns. Always use `--lines`, `--since`, or `--until` to get a bounded fetch.
+In an interactive terminal, `railway logs` streams indefinitely when no bounding flags are given. Always use `--lines`, `--since`, or `--until` to get a bounded fetch for agent workflows.
 
 ## Build configuration
 

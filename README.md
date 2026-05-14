@@ -29,7 +29,7 @@ railway login
 You can also install the Railway CLI and configure agent support in one step:
 
 ```bash
-bash <(curl -fsSL cli.new) --agents -y
+bash <(curl -fsSL https://railway.com/install.sh) --agents -y
 ```
 
 ### Claude Code
