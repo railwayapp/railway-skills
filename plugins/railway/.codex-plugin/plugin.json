@@ -1,6 +1,6 @@
 {
   "name": "railway",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Railway agent tools for projects, services, deployments, and infrastructure.",
   "author": {
     "name": "Railway",
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Railway",
     "shortDescription": "Deploy, configure, and operate Railway projects.",
-    "longDescription": "Use Railway agent skills and the local Railway MCP server to manage projects, services, deployments, variables, domains, databases, object storage, logs, and metrics from Codex.",
+    "longDescription": "Use Railway agent skills, Railway Agent, and local or remote MCP to manage projects, services, deployments, variables, domains, databases, object storage, logs, and metrics from Codex.",
     "developerName": "Railway",
     "category": "Productivity",
     "capabilities": [

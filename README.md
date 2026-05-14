@@ -130,6 +130,7 @@ This repo ships one installable skill:
 - Environment config and variables
 - Networking and domains
 - Status and observability
+- Railway Agent, MCP, and skills setup
 - Projects and workspaces
 - Docs and community search
 

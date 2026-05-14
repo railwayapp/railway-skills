@@ -8,6 +8,8 @@ Manage environments, variables, service config, domains, and networking.
 
 ```bash
 railway environment list --json
+railway environment list --ephemeral --json      # only PR environments
+railway environment list --no-ephemeral --json   # hide PR environments
 railway environment link <environment>           # switch active environment
 ```
 
@@ -30,7 +32,17 @@ railway variable set KEY=value --service <service> --environment <env>
 railway variable delete KEY --service <service> --environment <env>
 ```
 
-Variable changes trigger a redeployment by default. This is usually the desired behavior, since the service picks up the values on restart.
+Variable changes trigger a redeployment by default. This is usually the desired behavior, since the service picks up the values on restart. Use `--skip-deploys` only when you plan to redeploy or restart separately.
+
+### Set sensitive values
+
+Use stdin for secrets or values that shouldn't appear in shell history:
+
+```bash
+printf "%s" "$SECRET_VALUE" | railway variable set API_KEY --stdin --service <service>
+railway variable set FEATURE_FLAG=true --service <service> --skip-deploys
+railway variable set API_URL=https://api.example.com --project <project-id> --environment <env> --service <service>
+```
 
 ### Template syntax
 
@@ -73,7 +85,7 @@ Service names in references are case-sensitive and must match the service name e
 **Frontend apps cannot use private networking.** Frontends run in the user's browser, not on Railway's network. They cannot reach `RAILWAY_PRIVATE_DOMAIN` or internal database URLs. Options:
 
 1. **Backend proxy** (recommended): frontend calls a backend API on a public domain, backend connects to the database over the private network.
-2. **Public database URL**: use the public connection variable (for example, `${{Postgres.DATABASE_PUBLIC_URL}}`). This requires a TCP proxy on the database service and exposes the database to the internet — only appropriate for development or low-sensitivity data.
+2. **Public database URL**: use the public connection variable (for example, `${{Postgres.DATABASE_PUBLIC_URL}}`). This requires a TCP proxy on the database service and exposes the database to the internet. Use this only for development or low-sensitivity data.
 
 ### Railway-provided variables
 
@@ -132,6 +144,7 @@ railway environment edit --service-config <service> deploy.startCommand "npm sta
 railway environment edit --service-config <service> build.buildCommand "npm run build"
 railway environment edit --service-config <service> source.rootDirectory "/apps/api"
 railway environment edit --service-config <service> deploy.numReplicas 2
+railway environment edit --project <project-id> --environment production --service-config <service> deploy.startCommand "npm start"
 ```
 
 ### JSON patch
@@ -144,7 +157,18 @@ railway environment edit --json <<'JSON'
 JSON
 ```
 
-Resolve exact service IDs from `railway status --json` before constructing JSON patches. Using names in the JSON payload doesn't work.
+Resolve exact service IDs from `railway service list --json` before constructing JSON patches. Using names in the JSON payload doesn't work.
+
+### Stage config changes
+
+Stage changes when the user wants to review config before committing it:
+
+```bash
+railway environment edit --service-config <service> build.buildCommand "npm run build" --stage
+railway environment edit --service-config <service> deploy.startCommand "npm start" --message "Set production start command"
+```
+
+Use `--stage` only when the user requests staged config changes. Use regular edits for immediate mutations.
 
 ### Config schema (typed paths)
 
@@ -173,11 +197,11 @@ Natural language mapping: "add replicas in Europe" → `europe-west4-drams3a`, "
 
 **Variables**: `variables.<KEY>.value` (string), `variables.<KEY>.isOptional` (boolean), `variables.<KEY>.isSealed` (boolean). Delete a variable by setting it to `null`.
 
-**Lifecycle**: `isDeleted` (boolean) removes the service. `isCreated` (boolean) marks as new.
+**Lifecycle**: `isDeleted` (boolean) removes the service. `isCreated` (boolean) marks as new. Prefer `railway service delete` for normal service deletion.
 
 **Storage**: `volumeMounts.<volume-id>.mountPath` (string), `volumes.<volume-id>.isDeleted` (boolean)
 
-**Buckets**: `buckets.<bucket-id>.region` (string: `sjc`, `iad`, `ams`, `sin`), `buckets.<bucket-id>.isCreated` (boolean), `buckets.<bucket-id>.isDeleted` (boolean). Buckets are created at the project level via `railway bucket create` and deployed to environments via config patches. The CLI handles this automatically — use `railway bucket` commands
+**Buckets**: `buckets.<bucket-id>.region` (string: `sjc`, `iad`, `ams`, `sin`), `buckets.<bucket-id>.isCreated` (boolean), `buckets.<bucket-id>.isDeleted` (boolean). Buckets are created at the project level via `railway bucket create` and deployed to environments via config patches. The CLI handles this automatically, so use `railway bucket` commands
 
 ### Shared variables and project-level config
 
@@ -201,7 +225,7 @@ Verify after mutation to confirm the change took effect:
 
 ```bash
 railway environment config --json
-railway service status --all --json
+railway service list --json
 ```
 
 ## Domains
@@ -271,7 +295,7 @@ Get the domain IDs from `railway environment config --json` under the service's 
 ## Troubleshoot configuration
 
 - **Invalid dot-path**: check field names and types in the config schema section above
-- **Wrong service key in JSON patch**: resolve service IDs from `railway status --json`
+- **Wrong service key in JSON patch**: resolve service IDs from `railway service list --json`
 - **Variable change didn't take effect**: verify with `railway variable list`, changes trigger redeploy by default
 - **Domain returns errors**: verify the service has a healthy deployment and the target port is correct
 - **DNS propagation delay**: custom domains take time to propagate, this is normal
@@ -282,4 +306,4 @@ Get the domain IDs from `railway environment config --json` under the service's 
 ## Validated against
 
 - Docs: [environment.md](https://docs.railway.com/cli/environment), [variable.md](https://docs.railway.com/cli/variable), [variables.md](https://docs.railway.com/variables), [domains.md](https://docs.railway.com/networking/domains), [public-networking.md](https://docs.railway.com/networking/public-networking), [private-networking.md](https://docs.railway.com/networking/private-networking)
-- CLI source: [environment/mod.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/environment/mod.rs), [environment/edit.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/environment/edit.rs), [variable.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/variable.rs), [domain.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/domain.rs), [controllers/config/patch.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/controllers/config/patch.rs)
+- CLI source: [environment/mod.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/environment/mod.rs), [environment/edit.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/environment/edit.rs), [variable.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/variable.rs), [domain.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/domain.rs), [controllers/config/patch.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/controllers/config/patch.rs)

@@ -337,3 +337,8 @@ Railway services auto-scale CPU, RAM, and disk based on actual usage. Users do N
 - **Disk does NOT auto-scale** — Railway volumes have a fixed capacity. Paid users (Hobby and Pro) can expand them live without downtime, but it requires a manual resize. Flag high disk utilization as actionable. Users are billed for actual disk utilization, not the full volume size.
 - **Focus on actual usage values**, not the ratio to limits. Analyze whether 70 MB of memory is healthy for this workload — don't compare it to the 32 GB ceiling.
 - When tuning database parameters (shared_buffers, innodb_buffer_pool_size, maxmemory, etc.), base recommendations on the **current actual RAM** from `metrics_history.memory`, not the limit.
+
+## Validated against
+
+- Docs: [ssh.md](https://docs.railway.com/cli/ssh), [logs.md](https://docs.railway.com/cli/logs), [metrics.md](https://docs.railway.com/cli/metrics), [api docs](https://docs.railway.com/api/llms-docs.md)
+- Local scripts: [analyze-postgres.py](../scripts/analyze-postgres.py), [analyze-mysql.py](../scripts/analyze-mysql.py), [analyze-redis.py](../scripts/analyze-redis.py), [analyze-mongo.py](../scripts/analyze-mongo.py), [dal.py](../scripts/dal.py)

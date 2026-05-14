@@ -4,9 +4,10 @@ description: >
   Operate Railway infrastructure: create projects, provision services and
   databases, manage object storage buckets, deploy code, configure environments
   and variables, manage domains, troubleshoot failures, check status and metrics,
-  and query Railway docs. Use this skill whenever the user mentions Railway,
-  deployments, services, environments, buckets, object storage, build failures,
-  or infrastructure operations, even if they don't say "Railway" explicitly.
+  set up Railway agent tooling, and query Railway docs. Use this skill whenever
+  the user mentions Railway, deployments, services, environments, buckets,
+  object storage, build failures, agent setup, MCP, or infrastructure operations,
+  even if they don't say "Railway" explicitly.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*), Bash(python3:*)
 ---
 
@@ -56,20 +57,21 @@ Before any mutation, verify context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.2.0" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.2.1" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.0` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight just for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.1` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
-**Context resolution — URL IDs always win:**
-- If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json` — it returns the locally linked project, which is usually unrelated.
+**Context resolution - URL IDs always win:**
+- If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
 - If no URL is given, fall back to `railway status --json` for the linked project/environment/service.
 
 If the CLI is missing, guide the user to install it.
 
 ```bash
 bash <(curl -fsSL cli.new) # Shell script (macOS, Linux, Windows via WSL)
+bash <(curl -fsSL cli.new) --agents -y # Install CLI and configure detected agents
 brew install railway # Homebrew (macOS)
 npm i -g @railway/cli # npm (macOS, Linux, Windows). Requires Node.js version 16 or higher.
 ```
@@ -82,6 +84,45 @@ If a command is not recognized (for example, `railway environment edit`), the CL
 railway upgrade
 ```
 
+## Agent tooling
+
+Use direct Railway CLI commands for deterministic operations. Use `railway agent` only when the user explicitly asks for Railway Agent, wants a natural-language investigation, or the task is broader than a single resource operation.
+
+Set up Railway skills, MCP, and authentication with:
+
+```bash
+railway setup agent
+railway setup agent -y
+railway setup agent --remote
+```
+
+`railway setup agent -y` skips the interactive login flow. If the user isn't authenticated after setup, run `railway login`.
+
+Install or update MCP and skills directly when the user names a target tool:
+
+```bash
+railway mcp install
+railway mcp install --agent codex
+railway mcp install --agent cursor --remote
+railway skills
+railway skills update --agent codex
+railway skills remove --agent cursor
+```
+
+Supported targets include `claude-code`, `cursor`, `codex`, `opencode`, `copilot`, and `factory-droid`. The `--remote` flag configures `https://mcp.railway.com` instead of a local `railway mcp` stdio server.
+
+Use Railway Agent chat with:
+
+```bash
+railway agent
+railway agent -p "why is my service crashing?"
+railway agent -p "summarize the deployment status" --json
+railway agent --list --json
+railway agent --thread-id <thread-id>
+```
+
+`railway agent` requires user OAuth authentication from `railway login`. Project tokens (`RAILWAY_TOKEN`) are not supported for Railway Agent chat. If an agent command is unavailable, upgrade with `railway upgrade --yes`.
+
 ## Common quick operations
 
 These are frequent enough to handle without loading a reference:
@@ -90,10 +131,11 @@ These are frequent enough to handle without loading a reference:
 railway status --json                                    # current context
 railway whoami --json                                    # auth and workspace info
 railway project list --json                              # list projects
-railway service status --all --json                      # all services in current context
+railway service list --json                              # services in current environment
 railway variable list --service <svc> --json             # list variables
 railway variable set KEY=value --service <svc>           # set a variable
 railway logs --service <svc> --lines 200 --json          # recent logs
+railway metrics --service <svc> --since 1h --json        # resource and HTTP metrics summary
 railway up --detach -m "<summary>"                       # deploy current directory
 railway bucket list --json                               # list buckets in current environment
 railway bucket info --bucket <name> --json               # bucket storage and object count
@@ -103,7 +145,7 @@ railway bucket credentials --bucket <name> --json        # S3-compatible credent
 When using these commands from the skill, keep the command shape but prefix the Railway invocation with the telemetry env, for example:
 
 ```bash
-RAILWAY_CALLER="skill:use-railway@1.2.0" RAILWAY_AGENT_SESSION="railway-skill-20260508-1234" railway status --json
+RAILWAY_CALLER="skill:use-railway@1.2.1" RAILWAY_AGENT_SESSION="railway-skill-20260508-1234" railway status --json
 ```
 
 ## Routing
@@ -144,7 +186,7 @@ These commands modify database state and require the user to run them directly i
 
 When these operations are needed:
 1. Explain what the command does and any side effects (e.g., restart required)
-2. Show the exact command the user should run
+2. Show the exact command the user must run
 3. Wait for user confirmation that they ran it
 4. Verify the result with a read-only query
 

@@ -43,11 +43,12 @@ railway up --project <project-id> --environment <environment> --detach -m "<summ
 ### Redeploy and restart
 
 ```bash
-railway redeploy --service <service> --yes       # rebuild and deploy from same source
-railway restart --service <service> --yes         # restart without rebuilding
+railway redeploy --service <service> --yes              # redeploy the latest deployment
+railway redeploy --service <service> --from-source --yes # pull latest commit or image
+railway restart --service <service> --yes                # restart without rebuilding
 ```
 
-Redeploy triggers a full build cycle. Restart only restarts the running container. Use restart when the code hasn't changed but the service needs a fresh process (for example, after variable changes).
+Redeploy recreates the latest deployment without uploading local code. Use `--from-source` when the service is linked to a repo or image and you need Railway to pull the latest configured source. Restart only restarts the running container. Use restart when the code hasn't changed but the service needs a fresh process.
 
 ### Remove latest deployment
 
@@ -55,7 +56,17 @@ Redeploy triggers a full build cycle. Restart only restarts the running containe
 railway down --service <service> --yes
 ```
 
-This removes the latest successful deployment but doesn't delete the service. To delete a service entirely, use environment config patching (see [configure.md](configure.md)).
+This removes the latest successful deployment but doesn't delete the service. To delete a service entirely, use `railway service delete`.
+
+### Delete a service
+
+Use service deletion when the user wants to remove the service itself:
+
+```bash
+railway service delete --service <service> --environment <environment> --yes --json
+```
+
+Deleting a service is destructive. Confirm the target service and environment before running it.
 
 ## Deployment history and logs
 
@@ -77,7 +88,7 @@ Railway uses Railpack as the default builder. It detects language and framework 
 Three builder options, set via service config:
 
 - **RAILPACK** auto-detects language and framework, builds from source (default)
-- **NIXPACKS** is the legacy builder. DO NOT USE THIS, use RAILPACK instead.
+- **NIXPACKS** is the legacy builder. Use RAILPACK instead.
 - **DOCKERFILE** uses a Dockerfile you provide
 
 ```bash
@@ -174,11 +185,11 @@ railway environment edit --service-config <service> build.watchPatterns '["packa
 - **Build fails before compile**: check dependency graph, lockfiles, and whether the right builder is selected
 - **Build succeeds but app crashes**: verify start command and required runtime variables
 - **Wrong files in build**: check root directory and watch patterns
-- **`railway down` treated as delete**: `down` only removes the latest deployment. For full service deletion, use `isDeleted` in config patch (see [configure.md](configure.md))
+- **`railway down` treated as delete**: `down` only removes the latest deployment. For service deletion, use `railway service delete`
 - **Wrong Node/Python version detected**: set `RAILPACK_NODE_VERSION` or `RAILPACK_PYTHON_VERSION` as a service variable to pin the version
 - **Missing system package at runtime**: add the package to `RAILPACK_DEPLOY_APT_PACKAGES`
 
 ## Validated against
 
-- Docs: [up.md](https://docs.railway.com/cli/up), [deploying.md](https://docs.railway.com/cli/deploying), [deployment.md](https://docs.railway.com/cli/deployment), [down.md](https://docs.railway.com/cli/down), [railpack.md](https://docs.railway.com/builds/railpack), [monorepo.md](https://docs.railway.com/deployments/monorepo)
-- CLI source: [up.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/up.rs), [deployment.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/deployment.rs), [down.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/down.rs), [redeploy.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/redeploy.rs), [restart.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/restart.rs)
+- Docs: [up.md](https://docs.railway.com/cli/up), [deploying.md](https://docs.railway.com/cli/deploying), [deployment.md](https://docs.railway.com/cli/deployment), [redeploy.md](https://docs.railway.com/cli/redeploy), [service.md](https://docs.railway.com/cli/service), [down.md](https://docs.railway.com/cli/down), [railpack.md](https://docs.railway.com/builds/railpack), [monorepo.md](https://docs.railway.com/deployments/monorepo)
+- CLI source: [up.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/up.rs), [deployment.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/deployment.rs), [down.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/down.rs), [redeploy.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/redeploy.rs), [restart.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/restart.rs), [service.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/service.rs)

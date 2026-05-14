@@ -55,6 +55,17 @@ scripts/railway-api.sh \
 
 ## Services
 
+### List services
+
+Use `railway service list` for service discovery. It returns services in the current environment by default.
+
+```bash
+railway service list --json
+railway service list --project <project-id> --environment production --json
+```
+
+Prefer service IDs from JSON output when names may collide.
+
 ### Create a service
 
 ```bash
@@ -95,15 +106,28 @@ Service names in variable references are case-sensitive and must match exactly. 
 
 When creating new service instances via JSON config patches, include `isCreated: true` in the service block to mark it as a new service.
 
+### Delete a service
+
+Deleting a service removes it from the target environment. Confirm with the user before running it.
+
+```bash
+railway service delete --service <service> --environment <env> --yes --json
+railway service delete --service <service-id> --project <project-id> --environment <env> --yes --json
+```
+
+If 2FA is enabled and the command runs non-interactively, pass `--2fa-code <code>`.
+
 ### Deploy from a template
 
 Templates provision pre-configured services with sensible defaults, faster than creating an empty service and configuring it manually:
 
 ```bash
+railway templates search postgres --verified true --json
+railway templates search --category database --limit 10 --json
 railway deploy --template <template-code>
 ```
 
-Common template codes: `postgres`, `redis`, `mysql`, `mongodb`, `minio`, `umami`. For the full list, search via the GraphQL API (see [request.md](request.md)).
+The template search command doesn't require authentication. Use the `code` from the JSON results with `railway deploy --template <template-code>`.
 
 Template deployments typically create:
 
@@ -278,11 +302,11 @@ When creating projects, Railway uses the default workspace unless `--workspace` 
 - **CLI missing**: install via `brew install railway` or `curl -fsSL https://railway.com/install.sh | sh`
 - **Not authenticated**: `railway login`
 - **Project not found**: verify with `railway project list --json`, check workspace context
-- **Service not found**: `railway service status --all --json` to list all services in the project
+- **Service not found**: `railway service list --json` to list services in the current environment
 - **Wrong workspace**: inspect `railway whoami --json`, re-run with explicit `--workspace`
 - **Permission denied**: check workspace role, mutations require member or admin access
 
 ## Validated against
 
-- Docs: [cli.md](https://docs.railway.com/cli), [init.md](https://docs.railway.com/cli/init), [add.md](https://docs.railway.com/cli/add), [link.md](https://docs.railway.com/cli/link), [project.md](https://docs.railway.com/cli/project), [list.md](https://docs.railway.com/cli/list), [whoami.md](https://docs.railway.com/cli/whoami)
-- CLI source: [init.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/init.rs), [add.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/add.rs), [project.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/project.rs), [list.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/list.rs), [bucket.rs](https://github.com/railwayapp/cli/blob/feat/bucket-command/src/commands/bucket.rs)
+- Docs: [cli.md](https://docs.railway.com/cli), [init.md](https://docs.railway.com/cli/init), [add.md](https://docs.railway.com/cli/add), [link.md](https://docs.railway.com/cli/link), [project.md](https://docs.railway.com/cli/project), [service.md](https://docs.railway.com/cli/service), [templates.md](https://docs.railway.com/cli/templates), [list.md](https://docs.railway.com/cli/list), [whoami.md](https://docs.railway.com/cli/whoami)
+- CLI source: [init.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/init.rs), [add.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/add.rs), [project.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/project.rs), [service.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/service.rs), [templates.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/templates.rs), [list.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/list.rs), [bucket.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/bucket.rs)
