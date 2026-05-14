@@ -11,7 +11,7 @@
     {
       "name": "railway",
       "source": "plugins/railway",
-      "description": "Deploy and manage apps, databases, and infrastructure on Railway."
+      "description": "Use Railway agent skills, Railway Agent, and local or remote MCP to manage projects, services, deployments, and infrastructure from Cursor."
     }
   ]
 }

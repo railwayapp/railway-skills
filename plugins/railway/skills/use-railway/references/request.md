@@ -63,7 +63,7 @@ curl -s 'https://station-server.railway.com/gql' \
 
 ### LLM data export
 
-Bulk search alternative — fetches all public threads with full content:
+Bulk search alternative, fetches all public threads with full content:
 
 ```bash
 curl -s 'https://station-server.railway.com/api/llms-station'
@@ -121,7 +121,7 @@ scripts/railway-api.sh \
 
 `ServiceUpdateInput` fields: `name`, `icon` (image URL, animated GIF, or devicons URL like `https://devicons.railway.app/postgres`).
 
-Get the service ID from `railway status --json`.
+Get the service ID from `railway service list --json`.
 
 
 ## Service creation via GraphQL
@@ -152,7 +152,7 @@ After creating a service via GraphQL, configure it with a JSON config patch incl
 
 ## Metrics queries
 
-Resource usage metrics are only available via GraphQL:
+Use `railway metrics` for routine metric checks. Use GraphQL only when you need custom measurements, grouping, sample rates, or averaging windows that the CLI doesn't expose.
 
 ```bash
 scripts/railway-api.sh \
@@ -168,11 +168,21 @@ Available `MetricMeasurement` values: `CPU_USAGE`, `CPU_LIMIT`, `MEMORY_USAGE_GB
 
 Optional parameters: `endDate` (defaults to now), `sampleRateSeconds`, `averagingWindowSeconds`. Use `groupBy: ["SERVICE_ID"]` without `serviceId` to query all services in an environment at once. Valid `MetricTag` values for `groupBy`: `SERVICE_ID`, `DEPLOYMENT_ID`, `DEPLOYMENT_INSTANCE_ID`, `REGION`.
 
-Get environment and service IDs from `railway status --json`.
+Get the environment ID from `railway status --json`. Get service IDs from `railway service list --json`.
 
 ## Template search
 
-Search Railway's template marketplace:
+Use the CLI for template search:
+
+```bash
+railway templates search redis --verified true --json
+railway templates search --category database --limit 10 --json
+railway templates search --after <cursor> --json
+```
+
+The CLI search command doesn't require authentication and supports pagination with `pageInfo.endCursor`.
+
+Use GraphQL only when the CLI output isn't enough for the workflow:
 
 ```bash
 scripts/railway-api.sh \
@@ -189,7 +199,7 @@ scripts/railway-api.sh \
 | `query` | String | Search term |
 | `verified` | Boolean | Only verified templates |
 | `recommended` | Boolean | Only recommended templates |
-| `first` | Int | Number of results (max ~100) |
+| `first` | Int | Number of results |
 
 Common template codes: `ghost`, `strapi`, `minio`, `n8n`, `uptime-kuma`, `umami`, `postgres`, `redis`, `mysql`, `mongodb`.
 
@@ -203,7 +213,7 @@ railway deploy --template <template-code>
 
 For deploying into a specific environment or tracking the workflow, use the two-step GraphQL flow:
 
-**Step 1** — Fetch the template config:
+**Step 1**: Fetch the template config:
 
 ```bash
 scripts/railway-api.sh \
@@ -213,7 +223,7 @@ scripts/railway-api.sh \
   '{"code":"postgres"}'
 ```
 
-**Step 2** — Deploy with `templateDeployV2`:
+**Step 2**: Deploy with `templateDeployV2`:
 
 ```bash
 scripts/railway-api.sh \
@@ -234,5 +244,5 @@ scripts/railway-api.sh \
 
 ## Validated against
 
-- Docs: [api docs](https://docs.railway.com/api/llms-docs.md), [community.md](https://docs.railway.com/community), [cli/docs.md](https://docs.railway.com/cli/docs)
-- CLI source: [docs.rs](https://github.com/railwayapp/cli/blob/a8a5afe/src/commands/docs.rs)
+- Docs: [api docs](https://docs.railway.com/api/llms-docs.md), [community.md](https://docs.railway.com/community), [cli/docs.md](https://docs.railway.com/cli/docs), [templates.md](https://docs.railway.com/cli/templates), [metrics.md](https://docs.railway.com/cli/metrics)
+- CLI source: [docs.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/docs.rs), [templates.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/templates.rs), [metrics.rs](https://github.com/railwayapp/cli/blob/v4.58.0/src/commands/metrics.rs)
