@@ -194,7 +194,7 @@ railway variable set MISSING_VAR=value --service <service>
 railway redeploy --service <service> --yes
 
 # Verify
-railway service list --json
+railway service status --service <service> --json
 railway logs --service <service> --lines 200 --json
 ```
 
