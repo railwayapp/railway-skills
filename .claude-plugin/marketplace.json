@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "railway-skills",
-  "description": "Railway agent skills and MCP plugin marketplace for Claude Code",
+  "description": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Claude Code.",
   "owner": {
     "name": "Railway",
     "email": "contact@railway.com"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "railway",
-      "description": "Use Railway agent skills, Railway Agent, and local or remote MCP to manage projects, services, deployments, and infrastructure from Claude Code.",
+      "description": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Claude Code. Manage services, environments, deployments, databases, object storage, networking, and observability.",
       "author": {
         "name": "Railway"
       },

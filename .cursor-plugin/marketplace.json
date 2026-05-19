@@ -5,13 +5,13 @@
     "email": "contact@railway.com"
   },
   "metadata": {
-    "description": "Railway agent skills and MCP plugin marketplace for Cursor."
+    "description": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Cursor."
   },
   "plugins": [
     {
       "name": "railway",
       "source": "plugins/railway",
-      "description": "Use Railway agent skills, Railway Agent, and local or remote MCP to manage projects, services, deployments, and infrastructure from Cursor."
+      "description": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Cursor. Manage services, environments, deployments, databases, object storage, networking, and observability."
     }
   ]
 }

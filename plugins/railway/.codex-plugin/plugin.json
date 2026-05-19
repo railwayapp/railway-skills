@@ -1,7 +1,7 @@
 {
   "name": "railway",
   "version": "1.2.1",
-  "description": "Railway agent tools for projects, services, deployments, and infrastructure.",
+  "description": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Codex.",
   "author": {
     "name": "Railway",
     "email": "contact@railway.com",
@@ -21,8 +21,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Railway",
-    "shortDescription": "Deploy, configure, and operate Railway projects.",
-    "longDescription": "Use Railway agent skills, Railway Agent, and local or remote MCP to manage projects, services, deployments, variables, domains, databases, object storage, logs, and metrics from Codex.",
+    "shortDescription": "Deploy, configure, monitor, and troubleshoot Railway apps.",
+    "longDescription": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Codex. Manage services, environments, deployments, databases, object storage, networking, and observability.",
     "developerName": "Railway",
     "category": "Productivity",
     "capabilities": [
