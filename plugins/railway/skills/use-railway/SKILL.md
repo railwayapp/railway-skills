@@ -159,12 +159,6 @@ railway bucket info --bucket <name> --json               # bucket storage and ob
 railway bucket credentials --bucket <name> --json        # S3-compatible credentials
 ```
 
-When using these commands from the skill, keep the command shape but prefix the Railway invocation with the telemetry env, for example:
-
-```bash
-RAILWAY_CALLER="skill:use-railway@1.2.2" RAILWAY_AGENT_SESSION="railway-skill-20260508-1234" railway status --json
-```
-
 ## Routing
 
 For anything beyond quick operations, load the reference that matches the user's intent. Load only what you need, one reference is usually enough, two at most.
