@@ -58,12 +58,18 @@ scripts/railway-api.sh \
 ### Create a service
 
 ```bash
-railway add --service <service-name>          # empty service
-railway add --database postgres               # managed database (postgres, redis, mysql, mongodb)
-railway add                                   # interactive, prompts for type
+railway add --service <name> --json           # empty service
+railway add --database postgres --json        # managed database (postgres, redis, mysql, mongo)
+railway add                                   # interactive only — do not use non-interactively
 ```
 
-Before adding a database, check for existing database services to avoid duplicates. Run `railway environment config --json` and inspect `source.image` for each service:
+**Always pass `--json` to `railway add`.** Without it, a successful database create writes nothing to stdout — only a `> What do you need? Database` echo on stderr that looks identical to a stalled interactive prompt. Retrying based on "no stdout came back" silently provisions a second database. With `--json`, success prints `{"serviceId":"…","serviceName":"…"}` and failure exits non-zero.
+
+**`--database` is cumulative, not last-wins.** `railway add --database postgres --database redis` creates *both* in a single call. Don't repeat the flag — issue one `railway add` per database.
+
+**If `railway add` output looks ambiguous, never retry blind.** Run `railway service list --json` (or query `project.services` via [request.md](request.md)) first and compare against what you expected to exist. Treat the service list as the source of truth, not the CLI's stdout shape.
+
+Before adding a database — and before retrying any `railway add` whose output you can't interpret — list existing services to avoid duplicates. Run `railway service list --json` for a fast count, or `railway environment config --json` and inspect `source.image` per service when you need to identify the engine:
 
 | Image pattern | Database |
 |---|---|
