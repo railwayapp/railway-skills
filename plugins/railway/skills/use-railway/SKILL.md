@@ -146,7 +146,9 @@ These are frequent enough to handle without loading a reference. Use the matchin
 railway status --json                                    # current context
 railway whoami --json                                    # auth and workspace info
 railway project list --json                              # list projects
-railway service list --json                              # services in current environment
+railway service list --json                              # services in current environment (verify before retrying `add`)
+railway add --database <type> --json                     # add one database; ALWAYS pass --json
+railway add --service <name> --json                      # add empty service; ALWAYS pass --json
 railway variable list --service <svc> --json             # list variables
 railway variable set KEY=value --service <svc>           # set a variable
 railway logs --service <svc> --lines 200 --json          # recent logs
