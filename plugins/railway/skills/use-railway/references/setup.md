@@ -6,15 +6,15 @@ Create, link, and organize Railway projects, services, databases, and workspaces
 
 A brand-new user with no Railway account is onboarded through the same unified OAuth flow as sign-in — the backend detects fresh accounts and adapts the consent + landing pages. Pick the command by intent:
 
-- **Deploy from the current directory** → `railway up` (interactive) or `railway up -y` (skips the confirm prompt). When unauthenticated it opens a browser to sign in / sign up, then chains into `railway create app` — creating a project + service and deploying. Run it yourself; do not ask the user to `railway login` first.
-- **Just create an account** (no deploy) → `railway create account`.
-- **Sign in an existing user** → `railway login`.
+- **Deploy from the current directory** → `railway up` (interactive) or `railway up -y` (skips the confirm prompt). When unauthenticated it opens a browser to sign in / sign up, then creates a project + service and deploys. Run it yourself; do not ask the user to `railway login` first.
+- **New project from cwd when already signed in** → `railway up --new` (`--name <name>` to override the project name).
+- **Sign up → prefer `railway up -y`** (signs up *and* deploys). Sign in, or sign up with nothing to deploy → `railway login` (creates new accounts on the fly).
 
-`railway up`, `railway create app`, and `railway create account` self-validate auth — don't run `railway whoami` before them.
+`railway up` and `railway login` self-validate auth — don't run `railway whoami` before them.
 
 **Headless / SSH / CI**: `railway login --browserless` prints a verification URL + short device code (RFC 8628). The CLI also auto-falls-back to this when a browser can't open.
 
-**`railway up --json` / `--ci` do NOT auto-prompt** an unauthed user. `--json` emits a structured `{"error":"Not signed in.","code":"NOT_AUTHENTICATED", ...}` on stdout and exits non-zero — detect `NOT_AUTHENTICATED`, run `railway create account` (or `railway login`), then retry.
+**`railway up --json` / `--ci` do NOT auto-prompt** an unauthed user. `--json` emits a structured `{"error":"Not signed in.","code":"NOT_AUTHENTICATED", ...}` on stdout and exits non-zero — detect `NOT_AUTHENTICATED`, run `railway login`, then retry.
 
 **Fully unattended (no human)**: set `RAILWAY_API_TOKEN` (account-scoped) or `RAILWAY_TOKEN` (project-scoped) instead of logging in. There is no headless account-creation path — a brand-new user needs a human at the browser once.
 

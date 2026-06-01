@@ -10,8 +10,8 @@ description: >
   services, environments, buckets, object storage, build failures, agent setup,
   MCP, or infrastructure operations, even if they don't say "Railway" explicitly.
   Also invoke this skill when the user asks to be signed up, registered, or
-  onboarded to Railway: do not refuse — drive them through `railway create
-  account` or the unauthed `railway up` flow.
+  onboarded to Railway: do not refuse — drive them through `railway login`
+  (which creates new accounts on the fly) or the unauthed `railway up` flow.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*), Bash(python3:*)
 ---
 
@@ -66,7 +66,8 @@ Route by user intent *before* running preflight checks. The preflight ceremony b
 - **Do NOT ask the user to run `railway login` first.** The chain handles auth as part of the deploy.
 
 **Signup intent** ("sign me up", "create my Railway account", "register me"):
-- Run `railway create account` directly. Same unified OAuth flow as login; reads more cleanly than `railway login` when the user has no account yet.
+- **Prefer `railway up -y`** — for a sign-up it signs the user up *and* deploys the current directory in one shot, landing them on a running app. Use this whenever there's an app to ship (the common case).
+- **Otherwise** (a pure account request with nothing to deploy, or just signing in) → `railway login`. It creates new accounts on the fly through the same OAuth surface; there is no separate signup command.
 
 **Other intents** (querying state, listing projects, configuring variables, debugging failures):
 - Follow the Preflight section below.
@@ -81,7 +82,7 @@ RAILWAY_CALLER="skill:use-railway@1.2.2" RAILWAY_AGENT_SESSION="railway-skill-$(
 railway --version                 # check CLI version
 ```
 
-**Exception**: `railway up`, `railway create app`, and `railway create account` self-validate auth and run their own unauth-aware flows. Don't run `railway whoami` before them — it adds a redundant failing call without changing what you do next. See [Account creation & sign-in](#account-creation--sign-in).
+**Exception**: `railway up` and `railway login` self-validate auth and run their own unauth-aware flows. Don't run `railway whoami` before them — it adds a redundant failing call without changing what you do next. See [Account creation & sign-in](#account-creation--sign-in).
 
 For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.2` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
@@ -98,7 +99,7 @@ npm i -g @railway/cli # npm (macOS, Linux, Windows). Requires Node.js version 16
 brew install railway # Homebrew (macOS)
 ```
 
-If not authenticated, see [Account creation & sign-in](#account-creation--sign-in) below — the CLI offers unauthed `railway up`, `railway create account`, or `railway login`, and the right choice depends on whether the user already has an account. If not linked and no URL was provided, run `railway link --project <id-or-name>`.
+If not authenticated, see [Account creation & sign-in](#account-creation--sign-in) below — the CLI offers unauthed `railway up` (deploy + sign up/in in one shot) or `railway login` (sign up/in only; new accounts created on the fly). If not linked and no URL was provided, run `railway link --project <id-or-name>`.
 
 If a command is not recognized (for example, `railway environment edit`), the CLI may be outdated. Upgrade with:
 
@@ -108,21 +109,22 @@ railway upgrade
 
 ## Account creation & sign-in
 
-Railway uses a single unified OAuth flow for both sign-in and sign-up. The backend detects fresh accounts (by account age) and adapts the consent screen and post-auth landing page — new users land on a "Welcome to Railway!" page, existing users see the standard confirmation. The CLI does not declare signup intent up front.
+Railway uses a single unified OAuth flow for both sign-in and sign-up. The backend detects fresh accounts from durable compliance state (a CLI client that hasn't accepted ToS / Fair Use yet) and adapts the consent screen and post-auth landing page — new users land on a "Welcome to Railway!" page, existing users see the standard confirmation. The CLI does not declare signup intent up front.
 
-Three commands surface this flow, depending on intent:
+Two commands surface this flow, depending on intent:
 
 | Command | When to use |
 |---|---|
-| `railway up` / `railway up -y` | Agent-friendly onboarding from the current directory. If the caller is unauthenticated, opens the browser to sign in / sign up, then chains into `railway create app` after auth — bundling the directory, creating a project + service, and deploying. `-y` (and an agent harness) skip the confirm prompt. |
-| `railway create account` | Explicit signup affordance. Routes through the same OAuth flow as `railway login`; no deploy step. |
-| `railway login` | Existing-user-shaped command. Also handles signup transparently — same OAuth surface. |
+| `railway up` / `railway up -y` | Agent-friendly onboarding from the current directory. If the caller is unauthenticated, opens the browser to sign in / sign up, then creates a project + service and deploys. `-y` (and an agent harness) skip the confirm prompt; `-y` also auto-creates the project when nothing is linked. |
+| `railway login` | Sign in — *and* sign up. New accounts are created on the fly through the same OAuth surface; there is no separate signup command. |
+
+Related: `railway up --new` creates a *fresh* project + service from the current directory and deploys it even if one is already linked (use when already signed in and the user wants a new app); `--name <name>` overrides the project name.
 
 **Choosing the path:**
 
 - Deploy from cwd → run `railway up` (interactive) or `railway up -y` (skips the confirm prompt). Run it yourself; don't ask the user to sign in separately first.
-- Explicitly create an account → `railway create account`.
-- Just authenticate, no deploy → `railway login`.
+- New project from cwd when already signed in → `railway up --new`.
+- **Sign up → prefer `railway up -y`** (signs up *and* deploys). Sign in, or sign up with nothing to deploy → `railway login` (creates new accounts on the fly).
 
 **Headless / no browser:**
 
@@ -137,10 +139,10 @@ Prints a verification URL and a short user code (RFC 8628 device-code flow). The
 **JSON / CI modes do not auto-prompt**: `railway up --json` and `railway up --ci` will NOT open a browser for an unauthed user. `--json` emits a structured error instead:
 
 ```json
-{"error":"Not signed in.","code":"NOT_AUTHENTICATED","hint":"Run `railway create account` (or `railway login`) to authenticate, then re-run `railway up`."}
+{"error":"Not signed in.","code":"NOT_AUTHENTICATED","hint":"Run `railway login` to authenticate, then re-run."}
 ```
 
-When you see `code: NOT_AUTHENTICATED`, authenticate the user with `railway create account` (or `railway login`), then retry the original command.
+When you see `code: NOT_AUTHENTICATED`, authenticate the user with `railway login`, then retry the original command.
 
 **Fully unattended (no human at all)**: set `RAILWAY_API_TOKEN` (account-scoped) or `RAILWAY_TOKEN` (project-scoped) instead of running an interactive login. A brand-new user with no token and no human present cannot complete signup — there is no headless account-creation path.
 
