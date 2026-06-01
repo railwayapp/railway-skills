@@ -65,9 +65,9 @@ Route by user intent *before* running preflight checks. The preflight ceremony b
 - Announce intent before invoking: *"Running `railway up` — it'll sign you in if needed and deploy this directory."*
 - **Do NOT ask the user to run `railway login` first.** The chain handles auth as part of the deploy.
 
-**Signup intent** ("sign me up", "create my Railway account", "register me"):
-- **Prefer `railway up -y`** — for a sign-up it signs the user up *and* deploys the current directory in one shot, landing them on a running app. Use this whenever there's an app to ship (the common case).
-- **Otherwise** (a pure account request with nothing to deploy, or just signing in) → `railway login`. It creates new accounts on the fly through the same OAuth surface; there is no separate signup command.
+**Signup intent** ("sign me up", "create my Railway account", "register me", "get me on Railway"):
+- **If the current directory has a deployable app (e.g. `package.json`, `requirements.txt`, `go.mod`, `Dockerfile`, source to build), run `railway up -y`** — it signs the user up *and* deploys in one shot, landing them on a running app. This is the preferred signup path: **use it even when the user only said "sign me up"** — shipping their app is the goal, so don't make them pick a command and don't drop to a bare login. `railway login` is NOT the default for signup when there's something to deploy.
+- **Only when there is nothing to deploy** — an empty / non-app directory, or the user explicitly says they just want an account with no deploy — use `railway login` (creates new accounts on the fly through the same OAuth surface). There is no separate signup command.
 
 **Other intents** (querying state, listing projects, configuring variables, debugging failures):
 - Follow the Preflight section below.
@@ -124,7 +124,7 @@ Related: `railway up --new` creates a *fresh* project + service from the current
 
 - Deploy from cwd → run `railway up` (interactive) or `railway up -y` (skips the confirm prompt). Run it yourself; don't ask the user to sign in separately first.
 - New project from cwd when already signed in → `railway up --new`.
-- **Sign up → prefer `railway up -y`** (signs up *and* deploys). Sign in, or sign up with nothing to deploy → `railway login` (creates new accounts on the fly).
+- **Sign up with a deployable app in cwd → `railway up -y`** (signs up *and* deploys — the default, even if the user only said "sign me up"). Sign in, or sign up with nothing to deploy → `railway login` (creates new accounts on the fly).
 
 **Headless / no browser:**
 
