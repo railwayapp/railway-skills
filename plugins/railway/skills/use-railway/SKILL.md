@@ -66,7 +66,7 @@ Route by user intent *before* running preflight checks. The preflight ceremony b
 - **Do NOT ask the user to run `railway login` first.** The chain handles auth as part of the deploy.
 
 **Signup intent** ("sign me up", "create my Railway account", "register me", "get me on Railway"):
-- **If the current directory has a deployable app (e.g. `package.json`, `requirements.txt`, `go.mod`, `Dockerfile`, source to build), run `railway up -y`** — it signs the user up *and* deploys in one shot, landing them on a running app. This is the preferred signup path: **use it even when the user only said "sign me up"** — shipping their app is the goal, so don't make them pick a command and don't drop to a bare login. `railway login` is NOT the default for signup when there's something to deploy.
+- **If the current directory has a deployable app (e.g. `package.json`, `requirements.txt`, `go.mod`, `Dockerfile`, source to build), run `railway up`** — it signs the user up *and* deploys in one shot, landing them on a running app. A detected agent harness authorizes the project creation, so **bare `railway up` is enough** — use it even when the user only said "sign me up" (shipping their app is the goal; don't make them pick a command and don't drop to a bare login). Add `-y` to skip prompts and force the create non-interactively — the robust form if harness detection might miss. `railway login` is NOT the default for signup when there's something to deploy.
 - **Only when there is nothing to deploy** — an empty / non-app directory, or the user explicitly says they just want an account with no deploy — use `railway login` (creates new accounts on the fly through the same OAuth surface). There is no separate signup command.
 
 **Other intents** (querying state, listing projects, configuring variables, debugging failures):
@@ -115,7 +115,7 @@ Two commands surface this flow, depending on intent:
 
 | Command | When to use |
 |---|---|
-| `railway up` / `railway up -y` | Agent-friendly onboarding from the current directory. If the caller is unauthenticated, opens the browser to sign in / sign up, then creates a project + service and deploys. `-y` (and an agent harness) skip the confirm prompt; `-y` also auto-creates the project when nothing is linked. |
+| `railway up` | Agent-friendly onboarding from the current directory. Unauthenticated → opens the browser (or device-code) to sign in / sign up. With no linked project, a detected agent harness (or `-y`) auto-creates a project + service and deploys; an interactive human is offered create / link-existing / cancel. Add `-y` to skip prompts and force the create non-interactively (works even if harness detection misses). |
 | `railway login` | Sign in — *and* sign up. New accounts are created on the fly through the same OAuth surface; there is no separate signup command. |
 
 Related: `railway up --new` creates a *fresh* project + service from the current directory and deploys it even if one is already linked (use when already signed in and the user wants a new app); `--name <name>` overrides the project name.
@@ -124,7 +124,7 @@ Related: `railway up --new` creates a *fresh* project + service from the current
 
 - Deploy from cwd → run `railway up` (interactive) or `railway up -y` (skips the confirm prompt). Run it yourself; don't ask the user to sign in separately first.
 - New project from cwd when already signed in → `railway up --new`.
-- **Sign up with a deployable app in cwd → `railway up -y`** (signs up *and* deploys — the default, even if the user only said "sign me up"). Sign in, or sign up with nothing to deploy → `railway login` (creates new accounts on the fly).
+- **Sign up with a deployable app in cwd → `railway up`** (signs up *and* deploys — bare `up` works for a detected agent, even if the user only said "sign me up"; add `-y` to skip prompts / force it non-interactively). Sign in, or sign up with nothing to deploy → `railway login` (creates new accounts on the fly).
 
 **Headless / no browser:**
 
