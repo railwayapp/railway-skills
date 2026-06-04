@@ -216,7 +216,8 @@ railway variable list --service <svc> --json             # list variables
 railway variable set KEY=value --service <svc>           # set a variable
 railway logs --service <svc> --lines 200 --json          # recent logs
 railway metrics --service <svc> --since 1h --json        # resource and HTTP metrics summary
-railway up --detach -m "<summary>"                       # deploy current directory
+railway up --detach -m "<summary>"                       # deploy current directory (returns at QUEUED — verify before reporting)
+railway deployment list --json                           # poll newest deployment status after a detached up
 railway bucket list --json                               # list buckets in current environment
 railway bucket info --bucket <name> --json               # bucket storage and object count
 railway bucket credentials --bucket <name> --json        # S3-compatible credentials
@@ -246,6 +247,7 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 5. Resolve context before mutation. Know which project, environment, and service you're acting on.
 6. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
 7. After mutations, verify the result with a read-back command or MCP read.
+8. **Never report a deploy as successful without observing a terminal SUCCESS.** `railway up --detach` returning (it prints "Build queued") and a streaming `railway up` cut off by a shell timeout only confirm the build *started*. Poll `railway deployment list --json` until the newest deployment's `status` is `SUCCESS` (report deployed), or `FAILED`/`CRASHED` (triage per [operate.md](references/operate.md) — do not claim success). A streaming `up` that exits on its own is authoritative: exit 0 = deployed, exit 1 = failed.
 
 ## User-only commands (NEVER execute directly)
 

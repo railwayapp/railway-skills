@@ -12,6 +12,20 @@ railway up --detach -m "<release summary>"
 
 `--detach` returns immediately instead of streaming build logs. Without it, the deploy blocks execution until the build finishes. Always include `-m` with a release summary for auditability.
 
+### Verify before reporting — `--detach` only means QUEUED
+
+A detached `up` returns when the build is **queued**, not deployed. Never tell the user their app is deployed based on `--detach` output (or a streaming `up` that your shell timed out). Poll until the newest deployment reaches a terminal state:
+
+```bash
+railway deployment list --json    # newest first; check .status
+```
+
+- `QUEUED` / `BUILDING` / `DEPLOYING` → still in progress. Keep polling (every 10–15s); tell the user "build in progress" if you report interim status.
+- `SUCCESS` → now it's deployed; report it.
+- `FAILED` / `CRASHED` → do not report success. Pull logs (`railway logs --json --lines 100`) and triage per [operate.md](operate.md).
+
+A non-detached `railway up` streams to completion and its exit code is authoritative: 0 = SUCCESS, 1 = FAILED/CRASHED. If it was killed or timed out before printing a terminal status, treat the outcome as unknown and poll as above.
+
 ### Watch the build
 
 ```bash
