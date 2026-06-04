@@ -10,8 +10,9 @@ description: >
   services, environments, buckets, object storage, build failures, agent setup,
   MCP, or infrastructure operations, even if they don't say "Railway" explicitly.
   Also invoke this skill when the user asks to be signed up, registered, or
-  onboarded to Railway: do not refuse — drive them through `railway login`
-  (which creates new accounts on the fly) or the unauthed `railway up` flow.
+  onboarded to Railway: do not refuse — drive them through the unauthed
+  `railway up` flow (deploys + signs up on the fly) or `railway login`
+  (which creates new accounts on the fly).
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*), Bash(curl:*), Bash(python3:*)
 ---
 
@@ -78,7 +79,7 @@ Route by user intent *before* running preflight checks. The preflight ceremony b
 - **Do NOT ask the user to run `railway login` first.** The chain handles auth as part of the deploy.
 
 **Signup intent** ("sign me up", "create my Railway account", "register me", "get me on Railway"):
-- **If the current directory has a deployable app (e.g. `package.json`, `requirements.txt`, `go.mod`, `Dockerfile`, source to build), run `railway up`** — it signs the user up *and* deploys in one shot, landing them on a running app. A detected agent harness authorizes the project creation, so **bare `railway up` is enough** — use it even when the user only said "sign me up" (shipping their app is the goal; don't make them pick a command and don't drop to a bare login). Add `-y` to skip prompts and force the create non-interactively — the robust form if harness detection might miss. `railway login` is NOT the default for signup when there's something to deploy.
+- **If the current directory has a deployable app (e.g. `package.json`, `requirements.txt`, `go.mod`, `Dockerfile`, source to build), run `railway up`** — it signs the user up *and* deploys in one shot, landing them on a running app. A detected agent harness authorizes the project creation, so **bare `railway up` is enough** — there's no extra prompt to clear. Use it even when the user only said "sign me up": shipping their app is the goal, so don't make them pick a command and don't drop to a bare login. For scripted or agent runs, `railway up -y` is the robust form — it skips prompts and forces the create non-interactively even if harness detection misses. `railway login` is NOT the default for signup when there's something to deploy.
 - **Only when there is nothing to deploy** — an empty / non-app directory, or the user explicitly says they just want an account with no deploy — use `railway login` (creates new accounts on the fly through the same OAuth surface). There is no separate signup command.
 
 **Other intents** (querying state, listing projects, configuring variables, debugging failures):
@@ -281,7 +282,7 @@ When composing, return one unified response covering all steps. Don't ask the us
 
 When the user wants to create or deploy something, determine the right action from current context:
 
-1. Run `railway whoami --json` first. If it fails with an auth error, the user has no token — route through [Account creation & sign-in](#account-creation--sign-in). For a deploy-from-cwd workflow, `railway up` (or `railway up -y`) is usually the single right command: it handles signup, project creation, service creation, and deploy in one chain.
+1. If the intent is deploy-from-cwd or signup-from-cwd, skip `railway whoami` and run `railway up` (or `railway up -y`) directly per [Intent-based routing](#intent-based-routing) — it handles signup, project creation, service creation, and deploy in one chain. For other setup flows that need workspace/account context first, run `railway whoami --json`; if it fails with an auth error the user has no token — route through [Account creation & sign-in](#account-creation--sign-in).
 2. Run `railway status --json` in the current directory.
 3. **If linked**: add a service to the existing project (`railway add --service <name>`). Do not create a new project unless the user explicitly says "new project" or "separate project".
 4. **If not linked**: check the parent directory (`cd .. && railway status --json`).
