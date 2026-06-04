@@ -89,10 +89,6 @@ Then install the `railway` plugin from Grok's TUI:
 4. Select `railway` from the `railway-skills` marketplace.
 5. Press `i` to install.
 
-In `grok 0.2.20`, the CLI install command is source-based and does not install
-the marketplace plugin by name, so use the TUI marketplace install after adding
-the source.
-
 ### Cursor
 
 There is not currently an official public Cursor listing for Railway. Add this
