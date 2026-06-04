@@ -75,12 +75,23 @@ GitHub repository as a Codex marketplace:
 
 ### Grok Build
 
-Add this GitHub repository as a Grok marketplace, then install the `railway`
-plugin from Grok's extensions UI:
+Add this GitHub repository as a Grok marketplace:
 
 ```bash
 grok plugin marketplace add railwayapp/railway-skills
 ```
+
+Then install the `railway` plugin from Grok's TUI:
+
+1. Run `grok`.
+2. Open the extensions modal with `/plugins`.
+3. Go to the **Marketplace** tab.
+4. Select `railway` from the `railway-skills` marketplace.
+5. Press `i` to install.
+
+In `grok 0.2.20`, the CLI install command is source-based and does not install
+the marketplace plugin by name, so use the TUI marketplace install after adding
+the source.
 
 ### Cursor
 
