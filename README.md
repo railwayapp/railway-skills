@@ -4,9 +4,13 @@ Agent skills and plugin packages for [Railway](https://railway.com), following t
 
 ## Installation
 
-This repository packages Railway as a plugin for Claude Code, OpenAI Codex,
-and Cursor. The plugin includes the `use-railway` skill and local MCP
-configuration that runs `railway mcp`.
+This repository includes Railway plugin packaging for Claude Code, OpenAI
+Codex, Grok Build, and Cursor. The plugin includes the `use-railway` skill and
+local MCP configuration that runs `railway mcp`.
+
+Claude Code is the currently published official plugin path. Codex and Cursor
+support is packaged in this repository for environments that load this repo's
+marketplace manifests or distribute the plugin from this GitHub repository.
 
 Install the Railway CLI before using the plugin MCP server.
 
@@ -60,37 +64,41 @@ Codex environments that load this repository's plugin marketplace:
 - Plugin manifest: [`plugins/railway/.codex-plugin/plugin.json`](plugins/railway/.codex-plugin/plugin.json)
 - Marketplace: [`.agents/plugins/marketplace.json`](.agents/plugins/marketplace.json)
 
-OpenAI's public Codex guidance says plugins are managed from the Codex
-**Plugins** surface. When Railway is available in your Codex plugin library,
-install it there:
+There is not currently an official public Codex listing for Railway. Add this
+GitHub repository as a Codex marketplace:
 
 1. Open Codex.
-2. Select **Plugins** in the top-left corner.
-3. Browse the plugin library.
-4. Search for Railway.
-5. Install the Railway plugin.
+2. Select **Plugins** in the sidebar.
+3. Open the **More** dropdown.
+4. Click **Add more**.
+5. Enter [`railwayapp/railway-skills`](https://github.com/railwayapp/railway-skills) as the marketplace source.
+
+### Grok Build
+
+Add this GitHub repository as a Grok marketplace:
+
+```bash
+grok plugin marketplace add railwayapp/railway-skills
+```
+
+Then install the `railway` plugin from Grok's TUI:
+
+1. Run `grok`.
+2. Open the extensions modal with `/plugins`.
+3. Go to the **Marketplace** tab.
+4. Select `railway` from the `railway-skills` marketplace.
+5. Press `i` to install.
 
 ### Cursor
 
-When Railway is listed in the Cursor Marketplace, install it from Cursor:
+There is not currently an official public Cursor listing for Railway. Add this
+GitHub repository from Cursor settings:
 
-1. Open the marketplace panel in Cursor.
-2. Search for Railway.
-3. Install the Railway plugin.
-
-Teams and Enterprise admins can distribute Railway from this GitHub repository
-as a team marketplace:
-
-1. Open **Dashboard**.
-2. Go to **Settings**.
-3. Open **Plugins**.
-4. In **Team Marketplaces**, click **Import**.
-5. Paste the GitHub repository URL for this repository.
-6. Review the parsed `railway` plugin.
-7. Optional: Set Team Access groups.
-8. Name and save the marketplace.
-9. Install the plugin from Cursor's marketplace panel, or mark it as required
-   for the appropriate distribution group.
+1. Open **Settings**.
+2. Select **Plugins**.
+3. Paste `https://github.com/railwayapp/railway-skills` in the **Search or Paste Link** input.
+4. Click the Railway plugin.
+5. Click **Add to Cursor**.
 
 - Plugin manifest: [`plugins/railway/.cursor-plugin/plugin.json`](plugins/railway/.cursor-plugin/plugin.json)
 - Marketplace: [`.cursor-plugin/marketplace.json`](.cursor-plugin/marketplace.json)
@@ -99,14 +107,17 @@ as a team marketplace:
 
 The plugin includes local MCP config for tools that support plugin-bundled MCP servers:
 
-- Claude Code and Codex: [`plugins/railway/.mcp.json`](plugins/railway/.mcp.json)
+- Claude Code, Codex, and Grok Build: [`plugins/railway/.mcp.json`](plugins/railway/.mcp.json)
 - Cursor: [`plugins/railway/.cursor-plugin/mcp.json`](plugins/railway/.cursor-plugin/mcp.json)
 
 Both configs run `railway mcp`. Install and authenticate the Railway CLI before using the MCP server.
 
 ## Marketplace manifests
 
-This repo exposes one marketplace manifest per host ecosystem. Each marketplace lists the same shared `railway` plugin in `plugins/railway`.
+This repo exposes marketplace manifests for host ecosystems that need their own
+manifest shape. Each marketplace lists the same shared `railway` plugin in
+`plugins/railway`. Grok Build consumes the Claude Code marketplace/plugin
+compatibility path.
 
 - Claude Code: [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)
 - OpenAI Codex: [`.agents/plugins/marketplace.json`](.agents/plugins/marketplace.json)

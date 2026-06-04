@@ -8,9 +8,10 @@ The shared plugin payload lives in `plugins/railway`.
 
 - Claude Code: `plugins/railway/.claude-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.claude-plugin/marketplace.json`.
 - OpenAI Codex: `plugins/railway/.codex-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.agents/plugins/marketplace.json`.
+- Grok Build: consumes the Claude Code marketplace/plugin compatibility path through `.claude-plugin/marketplace.json` and `plugins/railway`.
 - Cursor: `plugins/railway/.cursor-plugin/plugin.json`, `plugins/railway/.cursor-plugin/mcp.json`, and the repo marketplace at `.cursor-plugin/marketplace.json`.
 
-Claude Code also uses `plugins/railway/hooks/hooks.json` for the existing Railway CLI/API auto-approval hook.
+Claude Code and Grok Build also use `plugins/railway/hooks/hooks.json` for the existing Railway CLI/API auto-approval hook.
 
 ## Skill model
 
@@ -96,7 +97,7 @@ When editing this plugin:
 - Keep references action-oriented with reasoning. Explain why, not only what.
 - Keep CLI behavior claims aligned with Railway docs and CLI source.
 - Keep a single "Validated against" block at the end of each reference.
-- Keep plugin versions aligned across Claude Code, Codex, and Cursor manifests when plugin behavior changes.
+- Keep plugin versions aligned across Claude Code, Codex, and Cursor manifests when plugin behavior changes. Grok Build consumes the Claude Code manifest through compatibility.
 - Bump `version` in `plugins/railway/.claude-plugin/plugin.json` in any PR that changes skill content or published plugin behavior. Claude Code uses this version to detect updates, and users will not receive changes without a bump.
 
 ## References
