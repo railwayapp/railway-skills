@@ -1,7 +1,7 @@
 {
   "name": "railway-skills",
   "interface": {
-    "displayName": "Railway Skills"
+    "displayName": "Railway Plugin"
   },
   "plugins": [
     {
