@@ -1,10 +1,10 @@
 {
   "name": "railway",
-  "version": "1.2.3",
-  "description": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Codex.",
+  "version": "1.2.4",
+  "description": "Deploy, configure, monitor, and troubleshoot apps and infrastructure on Railway from Codex using the Railway CLI and local MCP server.",
   "author": {
     "name": "Railway",
-    "email": "contact@railway.com",
+    "email": "gtm@railway.com",
     "url": "https://railway.com"
   },
   "homepage": "https://docs.railway.com/agents",
@@ -13,7 +13,9 @@
   "keywords": [
     "railway",
     "deployment",
+    "hosting",
     "infrastructure",
+    "databases",
     "mcp",
     "agent-skills"
   ],
@@ -22,12 +24,12 @@
   "interface": {
     "displayName": "Railway",
     "shortDescription": "Deploy, configure, monitor, and troubleshoot Railway apps.",
-    "longDescription": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway from Codex. Manage services, environments, deployments, databases, object storage, networking, and observability.",
+    "longDescription": "Use Railway from Codex through the local Railway CLI MCP server and curated Railway skills. Deploy apps, manage services and environments, configure variables and domains, provision databases and object storage, inspect logs and metrics, and troubleshoot failed builds or deployments.",
     "developerName": "Railway",
-    "category": "Productivity",
+    "category": "Developer Tools",
     "capabilities": [
-      "MCP",
-      "Skills"
+      "Interactive",
+      "Write"
     ],
     "websiteURL": "https://railway.com",
     "privacyPolicyURL": "https://railway.com/legal/privacy",
@@ -37,6 +39,9 @@
       "Deploy this app to Railway.",
       "Debug the latest Railway deployment."
     ],
-    "brandColor": "#0B0D0E"
+    "brandColor": "#0B0D0E",
+    "composerIcon": "./.codex-plugin/assets/railway-logo-light.svg",
+    "logo": "./.codex-plugin/assets/railway-logo-light.svg",
+    "screenshots": []
   }
 }
