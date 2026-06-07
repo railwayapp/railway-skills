@@ -77,10 +77,12 @@ Route by user intent *before* running preflight checks. The preflight ceremony b
 - Run `railway up` directly — it self-validates auth, signs the user in (the CLI opens a browser) if they're unauthenticated, and chains into project + service creation and deploy.
 - Announce intent before invoking: *"Running `railway up` — it'll sign you in if needed and deploy this directory."*
 - **Do NOT ask the user to run `railway login` first.** The chain handles auth as part of the deploy.
+- If the environment can't open a browser, the CLI prints a device-code sign-in link and waits — follow [Device-code sign-in: relay the link immediately](#account-creation--sign-in) (run in background, relay the link to the user the moment it prints).
 
 **Signup intent** ("sign me up", "create my Railway account", "register me", "get me on Railway"):
 - **If the current directory has a deployable app (e.g. `package.json`, `requirements.txt`, `go.mod`, `Dockerfile`, source to build), run `railway up`** — it signs the user up *and* deploys in one shot, landing them on a running app. A detected agent harness authorizes the project creation, so **bare `railway up` is enough** — there's no extra prompt to clear. Use it even when the user only said "sign me up": shipping their app is the goal, so don't make them pick a command and don't drop to a bare login. For scripted or agent runs, `railway up -y` is the robust form — it skips prompts and forces the create non-interactively even if harness detection misses. `railway login` is NOT the default for signup when there's something to deploy.
 - **Only when there is nothing to deploy** — an empty / non-app directory, or the user explicitly says they just want an account with no deploy — use `railway login` (creates new accounts on the fly through the same OAuth surface). There is no separate signup command.
+- Signup is the flow most likely to hit the device-code wait (brand-new users in sandboxed/headless agent environments). Follow [Device-code sign-in: relay the link immediately](#account-creation--sign-in) — a signup lost to an expired code is a lost user, not a retry.
 
 **Other intents** (querying state, listing projects, configuring variables, debugging failures):
 - Follow the Preflight section below.
@@ -91,7 +93,7 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.2.3" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.3.0" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
@@ -99,7 +101,7 @@ railway --version                 # check CLI version
 
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.3` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.3.0` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
@@ -151,6 +153,22 @@ railway login --browserless
 Prints a verification URL and a short user code (RFC 8628 device-code flow). The user opens the URL on any device and enters the code. The CLI auto-detects SSH sessions, CI, and a missing `DISPLAY` and falls back to device-code flow automatically when a browser can't open.
 
 **Agent harness, human present**: when the CLI detects an agent harness (Claude Code, Cursor, Codex, …) with a human at the keyboard, `railway up` opens the browser and skips the confirm prompt — the agent invocation is treated as consent. A real human still has to complete OAuth in the browser.
+
+**Device-code sign-in: relay the link immediately (CRITICAL):**
+
+When the CLI can't open a browser (sandboxed shell, container, SSH, no `DISPLAY`), unauthed `railway up` and `railway login` print a sign-in URL + short code and then **block, polling for up to 10 minutes** while the user completes sign-in. The code expires after 10 minutes. If you run this as a normal foreground command, your harness buffers the output until the command exits — **the user never sees the link until the code is already dead**. This is the #1 cause of failed agent-driven signups. Handle it like this:
+
+1. **Preferred — background execution** (e.g. Claude Code: `run_in_background`, then poll with `BashOutput`):
+   - Start the command in the background.
+   - Poll its output. The instant a `Sign in at: <url>` / `Enter this code: <code>` block appears, **stop everything and relay the URL and code to the user verbatim** — do not summarize, shorten, or defer them. Tell the user to open the link now and enter the code.
+   - Leave the command running and keep polling. When the user completes sign-in, the same process picks up the session and continues into the deploy on its own. Then verify per the deploy rules below.
+2. **No background support — set expectations, use the longest timeout:**
+   - Before running, tell the user: *"This will print a sign-in link — I'll show it to you the moment I have it. Please complete it promptly; the code expires in 10 minutes."*
+   - Run with the longest timeout your harness allows.
+   - If the command times out or is killed before sign-in completed, the printed code is **no longer being monitored** — a late click does nothing. Relay whatever link appeared anyway for context, then immediately re-run the command and relay the **new** link, telling the user to always use the newest one.
+3. **Never** wait silently for the command to finish before showing the link, and never report the sign-in as failed without first relaying the link and giving the user a chance to act.
+
+The browser transport needs none of this — the CLI opens the browser on the user's machine itself.
 
 **JSON / CI modes do not auto-prompt**: `railway up --json` and `railway up --ci` will NOT open a browser for an unauthed user. `--json` emits a structured error instead:
 
