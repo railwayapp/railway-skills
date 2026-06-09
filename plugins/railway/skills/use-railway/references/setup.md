@@ -12,7 +12,7 @@ A brand-new user with no Railway account is onboarded through the same unified O
 
 `railway up` and `railway login` self-validate auth — don't run `railway whoami` before them.
 
-**Headless / SSH / CI**: `railway login --browserless` prints a verification URL + short device code (RFC 8628). The CLI also auto-falls-back to this when a browser can't open.
+**Headless / SSH / CI**: the CLI auto-detects these and switches to the device-code flow (RFC 8628: sign-in link + short code) on its own. Do NOT pass `--browserless` just because you are an agent — if the human is at this machine, bare `railway login` opens their browser and completes far more reliably. Reserve the flag for machines with genuinely no browser that the auto-detection missed.
 
 **`railway up --json` / `--ci` do NOT auto-prompt** an unauthed user. `--json` emits a structured `{"error":"Not signed in.","code":"NOT_AUTHENTICATED", ...}` on stdout and exits non-zero — detect `NOT_AUTHENTICATED`, run `railway login`, then retry.
 

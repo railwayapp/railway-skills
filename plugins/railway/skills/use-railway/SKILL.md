@@ -154,7 +154,7 @@ The CLI **auto-detects** SSH sessions, CI, and a missing `DISPLAY` and switches 
 railway login --browserless   # ONLY for machines with genuinely no browser
 ```
 
-Forces the device-code flow (RFC 8628): prints a sign-in link and a short code for the user to open on any device. Reserve it for machines where no browser exists — SSH boxes, containers, remote VMs the auto-detection missed. When you do end up in a device-code flow, follow the relay procedure above: surface the sign-in link to the user the moment it prints.
+Forces the device-code flow (RFC 8628): prints a sign-in link and a short code for the user to open on any device. Reserve it for machines where no browser exists — SSH boxes, containers, remote VMs the auto-detection missed. When you do end up in a device-code flow, follow the relay procedure below: surface the sign-in link to the user the moment it prints.
 
 **Agent harness, human present**: when the CLI detects an agent harness (Claude Code, Cursor, Codex, …) with a human at the keyboard, `railway up` opens the browser and skips the confirm prompt — the agent invocation is treated as consent. A real human still has to complete OAuth in the browser.
 
@@ -164,7 +164,7 @@ When the CLI can't open a browser (sandboxed shell, container, SSH, no `DISPLAY`
 
 1. **Preferred — background execution** (e.g. Claude Code: `run_in_background`, then poll with `BashOutput`):
    - Start the command in the background.
-   - Poll its output. The instant a `Sign in at: <url>` / `Enter this code: <code>` block appears, **stop everything and relay the URL and code to the user verbatim** — do not summarize, shorten, or defer them. Tell the user to open the link now and enter the code.
+   - Poll its output. The instant a sign-in block appears (`Sign in with one click: <url>` on newer CLIs, or `Sign in at: <url>` / `Enter this code: <code>` on older ones), **stop everything and relay it to the user verbatim** — do not summarize, shorten, or defer it. Prefer the one-click URL when present; otherwise relay the URL and code together. Tell the user to open the link now.
    - Leave the command running and keep polling. When the user completes sign-in, the same process picks up the session and continues into the deploy on its own. Then verify per the deploy rules below.
 2. **No background support — set expectations, use the longest timeout:**
    - Before running, tell the user: *"This will print a sign-in link — I'll show it to you the moment I have it. Please complete it promptly; the code expires in 10 minutes."*
