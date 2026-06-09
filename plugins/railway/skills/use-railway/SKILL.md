@@ -93,7 +93,7 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.2.4" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.2.5" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
@@ -101,7 +101,7 @@ railway --version                 # check CLI version
 
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.4` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.5` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
@@ -146,11 +146,15 @@ Related: `railway up --new` creates a *fresh* project + service from the current
 
 **Headless / no browser:**
 
+The CLI **auto-detects** SSH sessions, CI, and a missing `DISPLAY` and switches to the device-code flow on its own — you almost never need to force it.
+
+**Do NOT pass `--browserless` just because you are an agent or your shell is non-interactive.** If the human is at this machine (a local IDE or desktop session — the common case), bare `railway login` opens *their* browser directly, which completes far more reliably than relaying a device code (~90% vs ~60% success for agent-driven sign-ins). Being a coding agent does not make the machine headless.
+
 ```bash
-railway login --browserless
+railway login --browserless   # ONLY for machines with genuinely no browser
 ```
 
-Prints a verification URL and a short user code (RFC 8628 device-code flow). The user opens the URL on any device and enters the code. The CLI auto-detects SSH sessions, CI, and a missing `DISPLAY` and falls back to device-code flow automatically when a browser can't open.
+Forces the device-code flow (RFC 8628): prints a sign-in link and a short code for the user to open on any device. Reserve it for machines where no browser exists — SSH boxes, containers, remote VMs the auto-detection missed. When you do end up in a device-code flow, follow the relay procedure above: surface the sign-in link to the user the moment it prints.
 
 **Agent harness, human present**: when the CLI detects an agent harness (Claude Code, Cursor, Codex, …) with a human at the keyboard, `railway up` opens the browser and skips the confirm prompt — the agent invocation is treated as consent. A real human still has to complete OAuth in the browser.
 
