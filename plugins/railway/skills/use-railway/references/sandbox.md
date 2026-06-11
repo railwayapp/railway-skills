@@ -54,7 +54,7 @@ railway sandbox exec --session <name>            # reattach and stream the outpu
 
 ## Remote builds
 
-Use templates to run build steps remotely. Build steps execute server-side in a transient sandbox; the result is a content-addressed filesystem snapshot cached server-side (~7 days), so re-running the same recipe is an instant cache hit.
+Use templates to run build steps remotely. Build steps execute server-side in a transient sandbox; the result is a content-addressed filesystem snapshot cached server-side, so re-running the same recipe is an instant cache hit.
 
 ### Build remotely
 
@@ -71,7 +71,7 @@ railway sandbox create --template ci             # boots from the cached snapsho
 railway sandbox exec -- npm start
 ```
 
-Template recipes are stored locally by this CLI — `Unknown template` means it was built elsewhere or never built; rebuild it with the command the error message prints.
+Template recipes are stored locally by this CLI — `Unknown template` means it was built elsewhere or never built; rebuild it with the command the error message prints. For state that must be reachable from other machines or later sessions, capture a [checkpoint](#checkpoints--save-and-restore-sandbox-state) instead.
 
 ### Inspect templates
 
@@ -98,6 +98,42 @@ railway sandbox fork <sandbox-id> --variable FOO=bar --private-network
 
 A fork copies the source's filesystem state but **does not inherit its variables or network mode** — re-pass `--variable`/`--env-file`/`--private-network` as needed.
 
+## Checkpoints — save and restore sandbox state
+
+Checkpoints are named disk snapshots captured from a running sandbox, stored server-side per environment. Use them to set a sandbox up once (clone a repo, install dependencies, seed data) and boot fresh sandboxes from that state later. Pick the right state mechanism:
+
+- **Template**: a reproducible recipe built from shell instructions — deterministic, but stored in this CLI's local store, so it only resolves on the machine that built it.
+- **Fork**: a live copy of a sandbox made right now.
+- **Checkpoint**: state you set up interactively, saved server-side by name — works from any machine or later agent session.
+
+### Capture
+
+```bash
+railway sandbox checkpoint create my-setup       # capture the active sandbox's disk
+railway sandbox checkpoint create my-setup --id <sandbox-id> --json
+```
+
+Capture is synchronous — the checkpoint is bootable as soon as the command returns, but flushing and uploading a large disk can take a while (the request honors `RAILWAY_HTTP_TIMEOUT`, so raise that rather than assuming a hang). Reusing a name **replaces the previous checkpoint without warning** — run `checkpoint list` first if overwriting matters. 64-character hex names are reserved for template hashes.
+
+### Boot from a checkpoint
+
+```bash
+railway sandbox create --checkpoint my-setup
+railway sandbox exec -- npm start
+```
+
+`--checkpoint` and `--template` are mutually exclusive. A checkpoint restores disk state only — variables and network mode are not part of the snapshot, so re-pass `--variable`/`--env-file`/`--private-network` on create as needed.
+
+### Manage checkpoints
+
+```bash
+railway sandbox checkpoint list --json
+railway sandbox checkpoint rename <name> <new-name>
+railway sandbox checkpoint delete <name>
+```
+
+Checkpoints are scoped to the environment: `list` shows only the linked environment's checkpoints, and `--checkpoint` resolves names within that scope. Deleting a checkpoint removes its underlying disk snapshot.
+
 ## List and teardown
 
 ```bash
@@ -113,8 +149,10 @@ Destroy sandboxes you created for a task once the task is done — idle timeout 
 
 - **Feature-availability error from the API**: Sandboxes aren't enabled for this workspace. Prompt the user to enable Sandboxes through Priority Boarding in the Railway dashboard; don't retry until they confirm.
 - **`No project selected` / `No environment selected`**: run `railway link` or pass `--project` with `--environment`.
-- **`Unknown template ...`**: the recipe isn't in this CLI's local store — rebuild with `railway sandbox template build --name <name> -c '<command>' --wait`.
+- **`Unknown template ...`**: the recipe isn't in this CLI's local store — rebuild with `railway sandbox template build --name <name> -c '<command>' --wait`, or use a checkpoint if the state was meant to travel between machines.
 - **`Template build failed`**: a step exited non-zero or exceeded its 10-minute limit; fix that step and rebuild.
+- **`No checkpoint named ...`**: checkpoints are environment-scoped — confirm the linked environment and run `railway sandbox checkpoint list`; the checkpoint may live in another environment or have been deleted/replaced.
+- **Checkpoint capture times out**: a large disk is still uploading — raise `RAILWAY_HTTP_TIMEOUT` (seconds) and retry rather than treating it as a failure.
 - **Exit code 124 from `exec`**: the client-side `--timeout` expired — rerun with a larger timeout or `--detach`.
 - **`that session may have expired; the server started a fresh one instead`**: the durable session lapsed; the command ran in a new session — check whether prior state mattered.
 - **SSH/forward drops**: the CLI reconnects automatically while the sandbox is RUNNING; if it reports the sandbox STOPPED, create or fork a new one.
@@ -122,4 +160,4 @@ Destroy sandboxes you created for a task once the task is done — idle timeout 
 ## Validated against
 
 - Docs: [sandboxes.md](https://docs.railway.com/sandboxes), [sandbox.md](https://docs.railway.com/cli/sandbox)
-- CLI source: [sandbox.rs](https://github.com/railwayapp/cli/blob/v5.8.0/src/commands/sandbox.rs), [sandbox_exec.rs](https://github.com/railwayapp/cli/blob/v5.8.0/src/controllers/sandbox_exec.rs)
+- CLI source: [sandbox.rs](https://github.com/railwayapp/cli/blob/v5.12.0/src/commands/sandbox.rs), [sandbox_exec.rs](https://github.com/railwayapp/cli/blob/v5.12.0/src/controllers/sandbox_exec.rs)
