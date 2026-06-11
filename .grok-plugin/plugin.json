@@ -1,0 +1,35 @@
+{
+  "name": "railway",
+  "version": "1.2.7",
+  "description": "Railway agent skills and MCP server for deploying, configuring, monitoring, and troubleshooting apps and infrastructure on Railway. Manage services, environments, deployments, databases, object storage, networking, and observability.",
+  "author": {
+    "name": "Railway",
+    "email": "contact@railway.com"
+  },
+  "homepage": "https://docs.railway.com/agents",
+  "repository": "https://github.com/railwayapp/railway-skills",
+  "license": "MIT",
+  "skills": ["./plugins/railway/skills/use-railway"],
+  "mcpServers": {
+    "railway": {
+      "command": "railway",
+      "args": ["mcp"]
+    }
+  },
+  "hooks": {
+    "description": "Auto-approve Railway API calls",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/plugins/railway/hooks/auto-approve-api.sh"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
