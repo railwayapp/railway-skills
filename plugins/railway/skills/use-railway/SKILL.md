@@ -93,15 +93,31 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.2.5" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.2.6" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
 **Exception**: `railway up` and `railway login` self-validate auth and run their own unauth-aware flows. Don't run `railway whoami` before them — it adds a redundant failing call without changing what you do next. See [Account creation & sign-in](#account-creation--sign-in).
 
+### Skill freshness
+
+Once per session, alongside the preflight checks, verify the installed Railway agent tooling is current. Root help ends with an `Agent tooling:` health section (printed to stderr, CLI 5.9+; older CLIs print nothing — skip this check rather than retrying):
+
+```bash
+railway --help 2>&1 | grep -A4 "Agent tooling:"
+```
+
+Act on what it reports:
+
+- Skills installed and up to date — continue; nothing to do.
+- An update is available (`rev <a> → <b> available`) — run `railway skills update`, then tell the user to restart their coding tool so the updated skills load. This session keeps running on the old skill revision until restart: finish the current request, and if this skill's guidance disagrees with the updated CLI's own output, trust the CLI.
+- Skills or MCP server missing (`✗` lines) — run `railway setup agent -y`, then tell the user to restart their coding tool.
+
+Check once per session and don't re-run it after acting; the restart prompt to the user is the resolution, not another check.
+
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.5` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.2.6` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
