@@ -1,0 +1,16 @@
+{
+  "description": "Auto-approve Railway API calls",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/plugins/railway/hooks/auto-approve-api.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

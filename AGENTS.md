@@ -8,7 +8,7 @@ The shared plugin payload lives in `plugins/railway`.
 
 - Claude Code: `plugins/railway/.claude-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.claude-plugin/marketplace.json`.
 - OpenAI Codex: `plugins/railway/.codex-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.agents/plugins/marketplace.json`.
-- Grok Build: consumes the Claude Code marketplace/plugin compatibility path through `.claude-plugin/marketplace.json` and `plugins/railway`. The xAI plugin marketplace (`xai-org/plugin-marketplace`) instead treats the repo root as the plugin, via the root manifest at `.grok-plugin/plugin.json`; that manifest points at the shared skill payload and inlines the MCP server and hook config with repo-root-relative paths.
+- Grok Build: consumes the Claude Code marketplace/plugin compatibility path through `.claude-plugin/marketplace.json` and `plugins/railway`. The xAI plugin marketplace (`xai-org/plugin-marketplace`) instead treats the repo root as the plugin, via the root manifest at `.grok-plugin/plugin.json`; that manifest references the shared skill payload and MCP config by path, plus a Grok-specific hooks file at `.grok-plugin/hooks.json`.
 - Cursor: `plugins/railway/.cursor-plugin/plugin.json`, `plugins/railway/.cursor-plugin/mcp.json`, and the repo marketplace at `.cursor-plugin/marketplace.json`.
 
 Claude Code and Grok Build also use `plugins/railway/hooks/hooks.json` for the existing Railway CLI/API auto-approval hook.
@@ -100,7 +100,8 @@ When editing this plugin:
 - Keep a single "Validated against" block at the end of each reference.
 - Keep plugin versions aligned across Claude Code, Codex, Cursor, and the root Grok manifest (`.grok-plugin/plugin.json`) when plugin behavior changes. Grok Build consumes the Claude Code manifest through compatibility; the xAI marketplace uses the root Grok manifest.
 - The xAI marketplace entry (`xai-org/plugin-marketplace`) pins this repo by commit SHA. After merging a release to `main`, bump the pinned `sha` in their `.grok-plugin/marketplace.json` and regenerate their plugin index, or users on the xAI catalog stay on the old commit.
-- Keep the inline `mcpServers` and `hooks` config in `.grok-plugin/plugin.json` in sync with `plugins/railway/.mcp.json` and `plugins/railway/hooks/hooks.json` (the inline hook command uses a repo-root-relative script path).
+- In `.grok-plugin/plugin.json`, reference components as paths (`skills` array, `mcpServers` and `hooks` as path strings). The Grok runtime ignores inline `mcpServers`/`hooks` objects in the manifest even though `grok plugin validate` accepts them — verify changes with `grok inspect` from a project that loads the repo as a plugin, not just `validate`.
+- Keep `.grok-plugin/hooks.json` in sync with `plugins/railway/hooks/hooks.json`; it differs only in the hook script path, which must be repo-root-relative (`.../plugins/railway/hooks/auto-approve-api.sh`) because the plugin root is the repo root for xAI marketplace installs.
 - Bump `version` in `plugins/railway/.claude-plugin/plugin.json` in any PR that changes skill content or published plugin behavior. Claude Code uses this version to detect updates, and users will not receive changes without a bump.
 
 ## References
