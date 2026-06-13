@@ -1,6 +1,6 @@
 {
   "name": "railway",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Deploy, configure, monitor, and troubleshoot apps and infrastructure on Railway from Codex using the Railway CLI and local MCP server.",
   "author": {
     "name": "Railway",
