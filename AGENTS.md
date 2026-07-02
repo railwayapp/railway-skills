@@ -8,7 +8,7 @@ The shared plugin payload lives in `plugins/railway`.
 
 - Claude Code: `plugins/railway/.claude-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.claude-plugin/marketplace.json`.
 - OpenAI Codex: `plugins/railway/.codex-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.agents/plugins/marketplace.json`.
-- Grok Build / xAI marketplace: resolves `plugins/railway` as the plugin by using a remote source subpath (`source.path: "plugins/railway"`). The shared payload therefore exposes `plugins/railway/.grok-plugin/plugin.json`, `plugins/railway/.grok-plugin/mcp.json`, `plugins/railway/skills`, and `plugins/railway/hooks` directly.
+- Grok Build / xAI marketplace: resolves `plugins/railway` as the plugin by using a remote source subpath (`source.path: "plugins/railway"`). The shared payload therefore exposes `plugins/railway/.grok-plugin/plugin.json`, `plugins/railway/skills`, `plugins/railway/hooks`, and `plugins/railway/.mcp.json` directly.
 - Cursor: `plugins/railway/.cursor-plugin/plugin.json`, `plugins/railway/.cursor-plugin/mcp.json`, and the repo marketplace at `.cursor-plugin/marketplace.json`.
 
 Claude Code and Grok Build also use `plugins/railway/hooks/hooks.json` for the existing Railway CLI/API auto-approval hook. The hook command resolves `${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/auto-approve-api.sh`.
@@ -66,7 +66,6 @@ Railway CLI exposes a local MCP server with `railway mcp`.
 - Keep `plugins/railway/.mcp.json` and `plugins/railway/.cursor-plugin/mcp.json` in sync.
 - The local MCP config must run `railway mcp`.
 - Do not store credentials in plugin MCP config. Railway CLI authentication comes from the user's local Railway login.
-- Grok marketplace installs use `plugins/railway/.grok-plugin/mcp.json`, which points at the hosted `https://mcp.railway.com` MCP server for single-click setup without a local CLI dependency.
 
 ### GraphQL API
 
