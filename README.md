@@ -80,18 +80,27 @@ GitHub repository from Cursor settings:
 
 ### Grok Build
 
-Add this GitHub repository as a Grok marketplace:
+Railway is packaged for Grok as the nested plugin at `plugins/railway`.
+Marketplace entries should point at that subpath with a pinned commit:
 
-```bash
-grok plugin marketplace add railwayapp/railway-skills
+```json
+{
+  "name": "railway",
+  "source": {
+    "source": "url",
+    "url": "https://github.com/railwayapp/railway-skills.git",
+    "sha": "<full commit sha>",
+    "path": "plugins/railway"
+  }
+}
 ```
 
-Then install the `railway` plugin from Grok's TUI:
+After the Railway entry is available in a Grok marketplace, install it from Grok's TUI:
 
 1. Run `grok`.
 2. Open the extensions modal with `/plugins`.
 3. Go to the **Marketplace** tab.
-4. Select `railway` from the `railway-skills` marketplace.
+4. Select `railway` from the marketplace.
 5. Press `i` to install.
 
 ## Skill surface

@@ -8,10 +8,10 @@ The shared plugin payload lives in `plugins/railway`.
 
 - Claude Code: `plugins/railway/.claude-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.claude-plugin/marketplace.json`.
 - OpenAI Codex: `plugins/railway/.codex-plugin/plugin.json`, `plugins/railway/.mcp.json`, and the repo marketplace at `.agents/plugins/marketplace.json`.
-- Grok Build / xAI marketplace: resolves the **repo root** as the plugin and auto-discovers components from standard root locations. The root therefore exposes `.grok-plugin/plugin.json` (metadata) plus three symlinks into the payload — `skills` → `plugins/railway/skills`, `hooks` → `plugins/railway/hooks`, `.mcp.json` → `plugins/railway/.mcp.json` — so no config is duplicated and `plugins/railway` stays the single source of truth.
+- Grok Build / xAI marketplace: resolves `plugins/railway` as the plugin by using a remote source subpath (`source.path: "plugins/railway"`). The shared payload therefore exposes `plugins/railway/.grok-plugin/plugin.json`, `plugins/railway/skills`, `plugins/railway/hooks`, and `plugins/railway/.mcp.json` directly.
 - Cursor: `plugins/railway/.cursor-plugin/plugin.json`, `plugins/railway/.cursor-plugin/mcp.json`, and the repo marketplace at `.cursor-plugin/marketplace.json`.
 
-Claude Code and Grok Build also use `plugins/railway/hooks/hooks.json` for the existing Railway CLI/API auto-approval hook. The hook command resolves `${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/auto-approve-api.sh`, which works through the root `hooks` symlink under Grok.
+Claude Code and Grok Build also use `plugins/railway/hooks/hooks.json` for the existing Railway CLI/API auto-approval hook. The hook command resolves `${GROK_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/auto-approve-api.sh`.
 
 ## Skill model
 
@@ -98,8 +98,8 @@ When editing this plugin:
 - Keep references action-oriented with reasoning. Explain why, not only what.
 - Keep CLI behavior claims aligned with Railway docs and CLI source.
 - Keep a single "Validated against" block at the end of each reference.
-- Keep plugin versions aligned across the Claude Code, Codex, Cursor, and root Grok (`.grok-plugin/plugin.json`) manifests when plugin behavior changes.
-- The root `skills`, `hooks`, and `.mcp.json` symlinks must keep pointing into `plugins/railway`; never replace them with copies, or Grok and the payload will drift.
+- Keep plugin versions aligned across the Claude Code, Codex, Cursor, and Grok (`plugins/railway/.grok-plugin/plugin.json`) manifests when plugin behavior changes.
+- For Grok/xAI marketplace entries, use the remote source subpath `plugins/railway` instead of adding root-level symlinks or copies.
 - Bump `version` in `plugins/railway/.claude-plugin/plugin.json` in any PR that changes skill content or published plugin behavior. Claude Code uses this version to detect updates, and users will not receive changes without a bump.
 
 ## References
