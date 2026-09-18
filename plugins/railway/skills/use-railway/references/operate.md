@@ -139,6 +139,8 @@ Metric flags can be combined: `--cpu`, `--memory`, `--network`, `--volume`, and 
 
 For custom grouping or measurements the CLI doesn't expose, use the GraphQL fallback in [request.md](request.md).
 
+For latency or errors that span several services, or a request a user reported with an `x-railway-trace-id` header, use tracing instead of correlating logs by hand: see [tracing.md](tracing.md).
+
 ## SSH
 
 Use SSH when logs and metrics don't expose enough state and the user needs shell-level inspection inside a running service.
@@ -289,6 +291,6 @@ Always verify after fixing. Don't assume the redeploy succeeded.
 
 ## Validated against
 
-- Docs: [status.md](https://docs.railway.com/cli/status), [service.md](https://docs.railway.com/cli/service), [logs.md](https://docs.railway.com/cli/logs), [metrics.md](https://docs.railway.com/cli/metrics), [ssh.md](https://docs.railway.com/cli/ssh), [cdn.md](https://docs.railway.com/cli/cdn), [waf.md](https://docs.railway.com/cli/waf), [observability/logs.md](https://docs.railway.com/observability/logs), [observability/metrics.md](https://docs.railway.com/observability/metrics)
+- Docs: [status.md](https://docs.railway.com/cli/status), [service.md](https://docs.railway.com/cli/service), [logs.md](https://docs.railway.com/cli/logs), [metrics.md](https://docs.railway.com/cli/metrics), [ssh.md](https://docs.railway.com/cli/ssh), [cdn.md](https://docs.railway.com/cli/cdn), [waf.md](https://docs.railway.com/cli/waf), [observability/logs.md](https://docs.railway.com/observability/logs), [observability/metrics.md](https://docs.railway.com/observability/metrics), [observability/tracing.md](https://docs.railway.com/observability/tracing)
 - CLI source: [status.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/status.rs), [service.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/service.rs), [logs.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/commands/logs.rs), [metrics.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/metrics.rs), [ssh/mod.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/ssh/mod.rs), [deployment.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/deployment.rs), [redeploy.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/redeploy.rs), [cdn.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/cdn.rs), [waf.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/waf.rs)
 - Authentication and CI recovery (v5.49.1): [client.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/client.rs), [up.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/commands/up.rs)
