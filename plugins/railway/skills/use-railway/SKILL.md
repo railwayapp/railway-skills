@@ -40,7 +40,7 @@ Most CLI commands operate on the linked project/environment/service context. Use
 Railway has three agent-facing operation paths. Choose the path that matches the job:
 
 - **Railway CLI** (`railway`): workflows that depend on local machine state such as current working directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, or exact command output.
-- **Remote MCP** (`https://mcp.railway.com`): default plugin MCP path for account/project/service discovery, deployment state, bounded logs, feature flags, simple redeploys, simple project creation, or complex Railway workflows that can be handed to `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
+- **Remote MCP** (`https://mcp.railway.com`): default plugin MCP path for account/project/service discovery, deployment state, bounded logs, traces, feature flags, simple redeploys, simple project creation, or complex Railway workflows that can be handed to `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
 - **GraphQL through `railway api`**: operations without a dedicated MCP tool or CLI command. Use schema search and inspection before constructing unfamiliar queries.
 
 If multiple paths are available, choose the one that preserves the needed context. The CLI fits workflows that need the current repo, local credentials, SSH, database scripts, or exact command output. Remote MCP fits OAuth-scoped platform operations that do not need local files or CLI state.
@@ -299,7 +299,7 @@ For anything beyond quick operations, load the references needed for the user's 
 | Inspect costs or manage spending limits | [usage.md](references/usage.md) | Workspace/project/service usage, billing periods, workspace and Railway Agent limits |
 | Run a coding agent on Railway ("cloud agent", "railway ca", "railway code", "desktop SSH") | [cloud-agents.md](references/cloud-agents.md) | Provision, connect, wake, sleep, delete, or configure desktop access to cloud agent VMs |
 | Check health or debug failures | [operate.md](references/operate.md) | Status, logs, metrics, build/runtime triage, recovery |
-| Trace requests across services ("tracing", "traces", "trace ID", "spans", "OpenTelemetry", "OTel", "OTLP", "instrument my app", "auto-instrumentation") | [tracing.md](references/tracing.md) | Enable tracing per project or service, automatic (eBPF) vs SDK instrumentation, the provided `OTEL_*` variables, sampling, verifying a trace, the Traces tab |
+| Trace requests across services ("tracing", "traces", "trace ID", "spans", "OpenTelemetry", "OTel", "OTLP", "instrument my app", "auto-instrumentation") | [tracing.md](references/tracing.md) | Enable tracing per project or service, automatic (eBPF) vs SDK instrumentation, the provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools, the Traces tab |
 | Use a sandbox or build remotely ("sandbox", "scratch environment", "ephemeral box", "build remotely", "remote build", "run this remotely", "checkpoint", "snapshot/save/restore sandbox state") | [sandbox.md](references/sandbox.md) | Create/fork sandboxes, run commands remotely, remote template builds, checkpoints (save/restore sandbox state), port forwarding, teardown. Requires Sandboxes enabled in Priority Boarding — if unavailable, prompt the user to enable it. |
 | Request from API, docs, or community | [request.md](references/request.md) | Railway GraphQL API queries/mutations, metrics queries, Central Station, official docs |
 
@@ -344,7 +344,7 @@ Multi-step workflows follow natural chains:
 - **First deploy**: setup (create project + service), configure (set variables and source), deploy, operate (verify healthy)
 - **Fix a failure**: operate (triage logs), configure (fix config/variables), deploy (redeploy), operate (verify recovery)
 - **Add a domain**: configure (add domain + set port), operate (verify DNS and service health)
-- **Add tracing**: tracing (enable for the project or service, choose automatic or SDK instrumentation), configure (set `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER`, start command), deploy (redeploy so the `OTEL_*` variables land), tracing (verify with `x-railway-trace-id` and the Traces tab)
+- **Add tracing**: tracing (enable for the project or service, choose automatic or SDK instrumentation), configure (set `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER`, start command), deploy (redeploy so the `OTEL_*` variables land), tracing (verify with `x-railway-trace-id` and `get-trace`)
 - **Docs to action**: request (fetch docs answer), route to the relevant operational reference
 
 When composing, return one unified response covering all steps. Don't ask the user to invoke each step separately.

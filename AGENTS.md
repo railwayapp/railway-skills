@@ -40,7 +40,7 @@ References:
 | Inspect costs or manage limits | `references/usage.md` | Workspace/project/service usage and workspace/agent spending limits |
 | Run coding agents on Railway | `references/cloud-agents.md` | Cloud agent lifecycle, harness launches, desktop SSH setup |
 | Check health or debug failures | `references/operate.md` | Status, logs, metrics, build/runtime triage, recovery |
-| Trace requests across services | `references/tracing.md` | Enable tracing, automatic (eBPF) vs SDK instrumentation, provided `OTEL_*` variables, sampling, verifying and viewing traces |
+| Trace requests across services | `references/tracing.md` | Enable tracing, automatic (eBPF) vs SDK instrumentation, provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools |
 | Use a sandbox or build remotely | `references/sandbox.md` | Sandboxes: create/fork, remote exec, remote template builds, checkpoints, port forwarding (requires Priority Boarding) |
 | Analyze databases | `references/analyze-db.md` | Database introspection and performance analysis, then DB-specific refs |
 | Request from API, docs, or community | `references/request.md` | GraphQL mutations, metrics queries, Central Station, official docs |
@@ -52,7 +52,7 @@ References:
 Choose the Railway operation path that matches the job.
 
 - Railway CLI (`railway`): local-machine workflows such as current-directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, and exact command output.
-- Remote MCP (`https://mcp.railway.com`): default plugin MCP path for account/project/service discovery, deployment status, feature flags, bounded logs, simple redeploys, simple project creation, and complex workflows through `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
+- Remote MCP (`https://mcp.railway.com`): default plugin MCP path for account/project/service discovery, deployment status, feature flags, bounded logs, traces, simple redeploys, simple project creation, and complex workflows through `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
 - GraphQL through `railway api`: operations without a dedicated MCP tool or CLI command, with live schema search and inspection.
 
 Optional: an already configured in-process CLI MCP (`railway mcp local`) can supply operations not available through hosted MCP. Bare `railway mcp` starts the hosted proxy using CLI login; it is not the in-process server. Published plugin configs use direct hosted HTTP with editor OAuth.
