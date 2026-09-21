@@ -59,6 +59,8 @@ What happens next:
 
 ## Choose how the service exports spans
 
+**Recommend the OpenTelemetry SDK.** Spans the service exports itself are much higher quality than what automatic instrumentation can recover from outside the process: they carry the route, the query, the business identifiers and the errors the code knows about; they nest under handler-level spans, so the trace shows which step of a request took the time instead of a flat list of calls; they continue the trace through queue consumers, cron work and TLS callees; and they work in any language. Automatic instrumentation is the fallback for a service whose code can't be changed right now, or a first look while the SDK is being added. Present it as a stopgap, not the destination. When a user asks to "instrument my app", default to the SDK unless they ask for the no-code path.
+
 | | Automatic instrumentation (OBI) | OpenTelemetry SDK |
 |---|---|---|
 | Code changes | None | Install the SDK, load it before the app serves requests |
@@ -93,11 +95,21 @@ Rules the agent must apply:
   ```
 
 - **User variables win.** A service that sets its own `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (for example to keep exporting to its own collector) gets none of the tracing variables, and its spans don't reach the Traces tab; edge spans still do. A service that sets either `OTEL_TRACES_SAMPLER` or `OTEL_TRACES_SAMPLER_ARG` keeps both of its own and Railway adds neither. Check `railway variable list --service <service> --json` before assuming the provided values apply.
-- **Load the SDK first.** Auto-instrumentation packages patch libraries at import time, so the SDK must be loaded before the app's modules: a `--require`/`--import` flag in the start command, `NODE_OPTIONS`, a Python `opentelemetry-instrument` wrapper, a Java `-javaagent`, and so on. Set it with `railway environment edit --service-config <service> deploy.startCommand "<command>"` or as a variable; see [deploy.md](deploy.md).
+- **Load the SDK first.** Instrumentation libraries (`@opentelemetry/auto-instrumentations-node`, `opentelemetry-instrumentation-*` and the like) patch libraries at import time, so the SDK must be loaded before the app's modules: a `--require`/`--import` flag in the start command, `NODE_OPTIONS`, a Python `opentelemetry-instrument` wrapper, a Java `-javaagent`, and so on. Set it with `railway environment edit --service-config <service> deploy.startCommand "<command>"` or as a variable; see [deploy.md](deploy.md).
 - **Keep W3C Trace Context propagation on** (the SDK default in most languages; Go requires setting the propagator explicitly) so the service continues the edge's trace instead of starting its own.
 - **Don't override `OTEL_SERVICE_NAME`** unless the user wants spans attributed under a different name than the Railway service.
 
 Per-language install steps, framework notes, and a custom-span example are in the docs: [Node.js](https://docs.railway.com/observability/tracing/nodejs), [Deno](https://docs.railway.com/observability/tracing/deno), [Python](https://docs.railway.com/observability/tracing/python), [Go](https://docs.railway.com/observability/tracing/go), [Java](https://docs.railway.com/observability/tracing/java), [Ruby](https://docs.railway.com/observability/tracing/ruby), [.NET](https://docs.railway.com/observability/tracing/dotnet), [Rust](https://docs.railway.com/observability/tracing/rust), [PHP](https://docs.railway.com/observability/tracing/php). Fetch the page for the user's stack rather than reciting SDK commands from memory.
+
+## What to instrument
+
+Instrumentation libraries give a trace its skeleton: a server span per request and a client span per call a library recognises. On its own that is barely better than automatic instrumentation. The value comes from spans the app opens itself around the units of work its authors think in. When adding tracing to a codebase, or when asked what to instrument, cover these three layers, in this order:
+
+1. **Inbound work.** One span per HTTP handler, gRPC method, queue or job consumer invocation, cron run and WebSocket message. The HTTP and gRPC server instrumentations usually cover handlers. Consumers, cron and background jobs are not covered by the edge or by most instrumentations, so wrap each message or run in its own span (kind `CONSUMER` or `INTERNAL`) and, where the message carries a `traceparent`, continue that context so the trace links back to the producer. Without this, background work is invisible or shows up as orphaned client spans.
+2. **I/O: database queries, cache calls, outgoing HTTP and gRPC calls, queue publishes.** This is where latency and failures hide. Use the driver or client instrumentation where one exists. Where none does (a raw socket client, a vendor SDK the instrumentations don't know), wrap the call in a `CLIENT` span with the standard `db.*`, `server.address` or `url.full` attributes. Every remote call should be visible as its own span.
+3. **Logical units of work.** A function that groups several I/O calls into one meaningful step (`checkout`, `syncUser`, `renderInvoice`), or one that is CPU-heavy on its own (parsing a large payload, image resizing, template rendering, serialising a big response). Give each an `INTERNAL` span carrying the identifiers a person debugging it would want (`order.id`, `tenant`, item counts). This turns twelve sibling `SELECT` spans under a handler into a tree that reads like the code and says which step took the time. Rule of thumb: if you would want log lines saying "starting X" and "finished X in N ms", X is a span.
+
+Keep spans out of tight loops and trivial helpers. A span per item in a loop of thousands hits the per-replica export limit (see Sampling) and adds nothing a `count` attribute on the parent wouldn't; instrument the loop, not the iteration. Name spans with low-cardinality names (`GET /users/{id}`, `db.query users`, `process order`) and put the variable parts in attributes. Set span status to `ERROR` and record the exception when a unit fails, so `@status:error` finds it. Never put secrets, tokens or raw personal data in span names or attributes.
 
 ## Sampling
 
