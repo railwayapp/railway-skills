@@ -17,7 +17,7 @@ Tracing has three settings. The project default (`tracingEnabled`) and the sampl
 
 **Dashboard:** open the **Traces** tab → **Tracing setup**. Toggle **Trace requests by default** under Project, optionally set a **Sample rate** (percentage), and use each service row's **Traced** switch for overrides and **Automatic instrumentation** / **Manual instrumentation** to pick how it exports spans. The same controls are on the service under **Settings → Tracing**.
 
-**Agent path:** three MCP tools read and change these settings. There is no `railway` CLI command for them. Resolve IDs from the URL or `railway status --json` first, and read before writing.
+**Agent path:** three MCP tools read and change these settings. There is no `railway` CLI command for them. Resolve IDs from the URL or `railway status --json` first, and read before writing. On a Railway cloud agent in a dashboard chat session the `railway` CLI is unauthenticated, so resolve IDs with `list-services` and stay on the MCP tools throughout.
 
 | Tool | Access | Purpose |
 |---|---|---|
@@ -43,7 +43,7 @@ Set project tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb: tracingEna
 Set service tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, service <service-id>: autoInstrumentationEnabled true
 ```
 
-The sample rate is a fraction from 0 to 1 in the tools and the API; the dashboard shows it as a percentage. `set-service-tracing` warns when it switches auto-instrumentation on for a service whose tracing is off: the switch does nothing until the service, or the project default, is enabled. Without Railway MCP, the public `projectUpdate` (`tracingEnabled`, `tracingSampleRate`) and `serviceUpdate` (`tracingEnabled`, `autoInstrumentationEnabled`) mutations through `railway api` set the same fields; see [request.md](request.md).
+The sample rate is a fraction from 0 to 1 in the tools and the API; the dashboard shows it as a percentage. `set-service-tracing` warns when it switches auto-instrumentation on for a service whose tracing is off: the switch does nothing until the service, or the project default, is enabled. Without Railway MCP, the public `projectUpdate` (`tracingEnabled`, `tracingSampleRate`) and `serviceUpdate` (`tracingEnabled`, `autoInstrumentationEnabled`) mutations through `railway api` set the same fields; see [request.md](request.md). That fallback needs an authenticated CLI, which a cloud agent's chat session does not have.
 
 What happens next:
 

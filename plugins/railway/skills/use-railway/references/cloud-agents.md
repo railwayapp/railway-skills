@@ -31,6 +31,10 @@ Choose one creation command with the needed options. `create` provisions a VM wi
 
 For a human terminal, bare `railway ca` opens the management TUI and `railway code` opens a session-focused view. Automated workflows should use explicit lifecycle commands rather than attempting to control that TUI. `ca setup` configures the default harness and skills; `ca setup --show` inspects preferences and `ca setup --reset` removes them when requested. Launching can carry harness authentication and skills from the local machine, so choose the harness and remote target deliberately.
 
+## Credentials inside the VM
+
+The VM ships the `railway` CLI, the `gh` CLI and the `railway` MCP server. The MCP server is authenticated in every session. The `railway` CLI is authenticated only inside an SSH terminal session (`railway ca ssh`, `railway code`, desktop SSH), which injects the user's token; a chat session started from the Railway dashboard or mobile app carries no CLI credential, by design. An agent working in such a session must not run `railway` commands, `railway api` included, and should use the MCP tools instead. `railway login` and `railway link` never help on the VM and fail in its non-interactive shell.
+
 ## Sleep, wake, and delete
 
 ```bash
