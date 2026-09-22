@@ -1,6 +1,6 @@
 # Tracing
 
-Trace a request from Railway's edge through a service and into the services it calls, and read the result with the `list-traces` and `get-trace` MCP tools or on the project's **Traces** tab.
+Trace a request from Railway's edge through a service and into the services it calls. Turn tracing on with the `set-service-tracing` and `set-project-tracing` MCP tools and read the result with `list-traces` and `get-trace`, or do both on the project's **Traces** tab.
 
 Tracing is a preview feature. If the project has no **Traces** tab, the account needs **Tracing** enabled in Priority Boarding first.
 
@@ -17,39 +17,33 @@ Tracing has three settings. The project default (`tracingEnabled`) and the sampl
 
 **Dashboard:** open the **Traces** tab → **Tracing setup**. Toggle **Trace requests by default** under Project, optionally set a **Sample rate** (percentage), and use each service row's **Traced** switch for overrides and **Automatic instrumentation** / **Manual instrumentation** to pick how it exports spans. The same controls are on the service under **Settings → Tracing**.
 
-**Agent path:** there is no CLI command or MCP tool for changing these settings; use `railway api` with the public `projectUpdate` and `serviceUpdate` mutations. Resolve IDs from the URL or `railway status --json` first.
+**Agent path:** three MCP tools read and change these settings. There is no `railway` CLI command for them. Resolve IDs from the URL or `railway status --json` first, and read before writing.
 
-```bash
-# Trace every service in the project by default, at Railway's default sample rate
-railway api \
-  'mutation enableTracing($id: String!) {
-    projectUpdate(id: $id, input: { tracingEnabled: true }) { tracingEnabled tracingSampleRate }
-  }' \
-  --variables '{"id":"<project-id>"}'
+| Tool | Access | Purpose |
+|---|---|---|
+| `get-tracing` | viewer | The project default (`tracingEnabled`, `sampleRate`) and, per service, `tracingOverride` (`true`/`false` pinned, `null` follows the project), the resolved `tracingEnabled`, `autoInstrumentationEnabled` and whether it is `autoInstrumentationActive`. Pass `serviceId` for one service, omit it for every service in the project |
+| `set-service-tracing` | member | `tracingEnabled` `true`/`false` pins one service regardless of the project default, `null` makes it follow the project again; `autoInstrumentationEnabled` switches OBI for the service. Each is optional and independent; omit what should stay as it is. Service-wide, not per environment |
+| `set-project-tracing` | member | `tracingEnabled` sets the project default for every service without an override; `sampleRate` is the fraction of client-facing requests the edge traces, `0..1`, `null` resets to Railway's default of every request. Each is optional |
 
-# Trace 25% of client-facing requests instead; null resets to the default
-railway api \
-  'mutation setRate($id: String!, $rate: Float) {
-    projectUpdate(id: $id, input: { tracingSampleRate: $rate }) { tracingSampleRate }
-  }' \
-  --variables '{"id":"<project-id>","rate":0.25}'
+All three take `projectId`. `describe-service` reports the same tracing state for one service.
 
-# Pin one service on or off regardless of the project default (null follows the project)
-railway api \
-  'mutation traceService($id: String!, $on: Boolean) {
-    serviceUpdate(id: $id, input: { tracingEnabled: $on }) { tracingEnabled }
-  }' \
-  --variables '{"id":"<service-id>","on":true}'
-
-# Turn on automatic instrumentation for a service whose tracing is on
-railway api \
-  'mutation autoInstrument($id: String!) {
-    serviceUpdate(id: $id, input: { autoInstrumentationEnabled: true }) { tracingEnabled autoInstrumentationEnabled }
-  }' \
-  --variables '{"id":"<service-id>"}'
+```text
+Get tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb
 ```
 
-`tracingSampleRate` is a fraction from 0 to 1 in the API; the dashboard shows it as a percentage. Read the settings back with `project(id) { tracingEnabled tracingSampleRate }` and `service(id) { tracingEnabled autoInstrumentationEnabled }`.
+```text
+Set service tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, service <service-id>: tracingEnabled true
+```
+
+```text
+Set project tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb: tracingEnabled true, sampleRate 0.25
+```
+
+```text
+Set service tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, service <service-id>: autoInstrumentationEnabled true
+```
+
+The sample rate is a fraction from 0 to 1 in the tools and the API; the dashboard shows it as a percentage. `set-service-tracing` warns when it switches auto-instrumentation on for a service whose tracing is off: the switch does nothing until the service, or the project default, is enabled. Without Railway MCP, the public `projectUpdate` (`tracingEnabled`, `tracingSampleRate`) and `serviceUpdate` (`tracingEnabled`, `autoInstrumentationEnabled`) mutations through `railway api` set the same fields; see [request.md](request.md).
 
 What happens next:
 
@@ -165,15 +159,15 @@ Workflow for "why is this request slow / failing":
 
 ## Troubleshoot
 
-- **No traces at all**: confirm `tracingEnabled` resolves to true for the service (service override, then project default), the service has a public domain, and the account has Tracing in Priority Boarding. With a low rate and little traffic, force one with the `traceparent` curl above, then `get-trace` it.
+- **No traces at all**: confirm `get-tracing` reports `tracingEnabled` true for the service (its override, then the project default), the service has a public domain, and the account has Tracing in Priority Boarding. With a low rate and little traffic, force one with the `traceparent` curl above, then `get-trace` it.
 - **Edge spans only, nothing from the app** (`get-trace` shows only `edge` and `proxy` components): the variables land on the next deploy, so redeploy. Then check the service doesn't set its own `OTEL_EXPORTER_OTLP_ENDPOINT`, the SDK loads before the app serves, and, for OBI, the process is a supported runtime handling HTTP or gRPC.
 - **App spans appear as separate traces** (`list-traces` shows service-rooted traces with `hasEdge` false next to edge-only ones): the SDK isn't reading `traceparent`. Enable the W3C Trace Context propagator and make sure nothing in front of the handlers strips the header.
 - **SDK logs metrics or logs export errors**: set `OTEL_METRICS_EXPORTER=none` and `OTEL_LOGS_EXPORTER=none`.
-- **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it to manual instrumentation.
+- **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it off with `set-service-tracing` (`autoInstrumentationEnabled` false).
 - **Spans missing from a busy service**: over 1,000 spans per replica per 10 seconds. Disable noisy instrumentations or lower the sample rate.
-- **Setting `tracingSampleRate` fails validation**: the API takes a fraction 0..1, not a percentage.
+- **Setting the sample rate fails validation**: `set-project-tracing` and the API take a fraction 0..1, not a percentage.
 
 ## Validated against
 
 - Docs: [tracing.md](https://docs.railway.com/observability/tracing), [automatic-instrumentation.md](https://docs.railway.com/observability/tracing/automatic-instrumentation), [nodejs.md](https://docs.railway.com/observability/tracing/nodejs), [variables/reference.md](https://docs.railway.com/variables/reference)
-- Platform source (railwayapp/mono): `common/javascript/models/src/tracingVariables.ts` (provided variables and precedence), `packages/backboard/src/graphql/v2/schema/schema.graphql` (`Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled`, `ProjectUpdateInput`, `ServiceUpdateInput`), `packages/hikari/src/settings/tunables.rs` (default sample rate), `packages/stacker-oteld/configs/main.go` (span limit), `packages/backboard/src/handlers/http/routes/mcp/tools/listTraces.ts` and `getTrace.ts` (MCP tools)
+- Platform source (railwayapp/mono): `common/javascript/models/src/tracingVariables.ts` (provided variables and precedence), `packages/backboard/src/graphql/v2/schema/schema.graphql` (`Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled`, `ProjectUpdateInput`, `ServiceUpdateInput`), `packages/hikari/src/settings/tunables.rs` (default sample rate), `packages/stacker-oteld/configs/main.go` (span limit), `packages/backboard/src/handlers/http/routes/mcp/tools/listTraces.ts`, `getTrace.ts`, `getTracing.ts`, `setServiceTracing.ts`, `setProjectTracing.ts` and `tracingMcpHelpers.ts` (MCP tools)
