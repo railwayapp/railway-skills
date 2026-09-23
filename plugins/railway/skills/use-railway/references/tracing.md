@@ -95,10 +95,10 @@ When tracing is on for a service, its next deploy gets these variables. They sho
 Rules the agent must apply:
 
 - **Don't hardcode the endpoint, protocol, or header** in code or Dockerfiles. Let the SDK read the variables.
-- **The receiver accepts traces only.** Most SDKs also export metrics and logs to the same endpoint by default and log errors when that fails. Set both on the service:
+- **The receiver accepts traces only.** Most SDKs also export metrics and logs to the same endpoint by default and log errors when that fails. Set both on the service with the `set-variables` MCP tool (`skipDeploys: true`, since the deploy that adds the SDK picks them up); `railway variable set ... --skip-deploys` does the same from a linked repo:
 
-  ```bash
-  railway variable set OTEL_METRICS_EXPORTER=none OTEL_LOGS_EXPORTER=none --service <service> --skip-deploys
+  ```text
+  Set variables for project <project-id>, service <service-id>: OTEL_METRICS_EXPORTER=none, OTEL_LOGS_EXPORTER=none, skipDeploys true
   ```
 
 - **User variables win.** A service that sets its own `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (for example to keep exporting to its own collector) gets none of the tracing variables, and its spans don't reach the Traces tab; edge spans still do. A service that sets either `OTEL_TRACES_SAMPLER` or `OTEL_TRACES_SAMPLER_ARG` keeps both of its own and Railway adds neither. Check `railway variable list --service <service> --json` before assuming the provided values apply.
@@ -132,10 +132,10 @@ What differs from a repo service:
 Recipe:
 
 1. Turn tracing on for the function with `set-service-tracing` (or `railway trace enable --service <function>`) if `get-tracing` shows it off. Leave `autoInstrumentationEnabled` off; it does nothing for Bun.
-2. Set the exporter variables. `NodeSDK` exports metrics and logs over OTLP by default and the receiver rejects both:
+2. Set the exporter variables with `set-variables`. `NodeSDK` exports metrics and logs over OTLP by default and the receiver rejects both. Pass `skipDeploys: true`; the code push in step 5 is the deploy that picks them up. Check `list-variables` first: a function that sets its own `OTEL_EXPORTER_OTLP_ENDPOINT` gets none of Railway's tracing variables.
 
-   ```bash
-   railway variable set OTEL_METRICS_EXPORTER=none OTEL_LOGS_EXPORTER=none --service <function> --skip-deploys
+   ```text
+   Set variables for project <project-id>, service <function-id>: OTEL_METRICS_EXPORTER=none, OTEL_LOGS_EXPORTER=none, skipDeploys true
    ```
 
 3. Read the code with `get-function-source-code`: `code` is what is current, `deployedCode` what runs, `staged` whether a commit is pending. Edit that, never a version recalled from memory.
