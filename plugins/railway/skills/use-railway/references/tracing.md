@@ -17,7 +17,9 @@ Tracing has three settings. The project default (`tracingEnabled`) and the sampl
 
 **Dashboard:** open the **Traces** tab → **Tracing setup**. Toggle **Trace requests by default** under Project, optionally set a **Sample rate** (percentage), and use each service row's **Traced** switch for overrides and **Automatic instrumentation** / **Manual instrumentation** to pick how it exports spans. The same controls are on the service under **Settings → Tracing**.
 
-**Agent path:** there is no CLI command or MCP tool for changing these settings; use `railway api` with the public `projectUpdate` and `serviceUpdate` mutations. Resolve IDs from the URL or `railway status --json` first.
+**Agent path:** the `get-tracing`, `set-project-tracing` and `set-service-tracing` MCP tools. `get-tracing` takes `projectId` and an optional `serviceId` and returns the project default, the sample rate and, per service, its override, the resolved state and the automatic instrumentation switch. `set-project-tracing` takes `tracingEnabled` and `sampleRate` (a fraction 0..1, `null` resets to Railway's default). `set-service-tracing` takes `tracingEnabled` (`true`/`false` pins, `null` follows the project) and `autoInstrumentationEnabled`. Tracing is a service-wide setting, not per environment. Read the settings back before changing them, and ask before changing the project default or the sample rate on the user's behalf.
+
+Without MCP, `railway api` with the public `projectUpdate` and `serviceUpdate` mutations does the same. Resolve IDs from the URL or `railway status --json` first.
 
 ```bash
 # Trace every service in the project by default, at Railway's default sample rate
@@ -63,7 +65,7 @@ What happens next:
 |---|---|---|
 | Code changes | None | Install the SDK, load it before the app serves requests |
 | Takes effect | About a minute after enabling, no redeploy | Next deploy |
-| Runtimes | Node.js, Go, Python, Ruby, Java | Any language with an OTel SDK |
+| Runtimes | Node.js, Go, Python, Ruby, Java. Not Bun, so not [Functions](#instrument-a-function-bun) | Any language with an OTel SDK |
 | Captures | Incoming HTTP/gRPC, plaintext outgoing HTTP/gRPC, decoded DB and cache protocols | Whatever the SDK's instrumentations cover, plus custom spans and attributes |
 | Misses | Outbound TLS callees don't join the trace; queue consumers, cron work and background jobs start new traces; Node.js and Python context propagation is best effort | Nothing structural; depends on the instrumentations you enable |
 
@@ -97,7 +99,71 @@ Rules the agent must apply:
 - **Keep W3C Trace Context propagation on** (the SDK default in most languages; Go requires setting the propagator explicitly) so the service continues the edge's trace instead of starting its own.
 - **Don't override `OTEL_SERVICE_NAME`** unless the user wants spans attributed under a different name than the Railway service.
 
-Per-language install steps, framework notes, and a custom-span example are in the docs: [Node.js](https://docs.railway.com/observability/tracing/nodejs), [Deno](https://docs.railway.com/observability/tracing/deno), [Python](https://docs.railway.com/observability/tracing/python), [Go](https://docs.railway.com/observability/tracing/go), [Java](https://docs.railway.com/observability/tracing/java), [Ruby](https://docs.railway.com/observability/tracing/ruby), [.NET](https://docs.railway.com/observability/tracing/dotnet), [Rust](https://docs.railway.com/observability/tracing/rust), [PHP](https://docs.railway.com/observability/tracing/php). Fetch the page for the user's stack rather than reciting SDK commands from memory.
+Per-language install steps, framework notes, and a custom-span example are in the docs: [Node.js](https://docs.railway.com/observability/tracing/nodejs), [Deno](https://docs.railway.com/observability/tracing/deno), [Functions (Bun)](https://docs.railway.com/observability/tracing/functions), [Python](https://docs.railway.com/observability/tracing/python), [Go](https://docs.railway.com/observability/tracing/go), [Java](https://docs.railway.com/observability/tracing/java), [Ruby](https://docs.railway.com/observability/tracing/ruby), [.NET](https://docs.railway.com/observability/tracing/dotnet), [Rust](https://docs.railway.com/observability/tracing/rust), [PHP](https://docs.railway.com/observability/tracing/php). Fetch the page for the user's stack rather than reciting SDK commands from memory.
+
+## Instrument a Function (Bun)
+
+A [Railway Function](https://docs.railway.com/functions) is a service whose source image starts with `ghcr.io/railwayapp/function-` (`function-bun:1.4.0` today) and whose code is one TypeScript file, base64-encoded into the start command. `get-service-config` shows the image; `get-function-source-code` returns the code. Automatic instrumentation does not cover Bun, and Bun 1.4 has no OpenTelemetry of its own, so a function exports spans only through the OpenTelemetry JavaScript SDK loaded inside that one file.
+
+What differs from a repo service:
+
+- **One file, no start command.** There is no `--require`, `--preload` or `bunfig.toml`. Put the SDK setup at the top of the file. It runs before `Bun.serve` takes its first request, which is all that is needed, because nothing gets monkey-patched.
+- **Dependencies come from imports.** The runtime turns every bare import into a `package.json` entry and runs `bun install` at every cold start, without a cache. Pin with `pkg@version` specifiers: `hono@4`, `@hono/otel@1`, `@opentelemetry/api@1`, and `@opentelemetry/sdk-node` to the exact `0.x` version tested, since it has no stable major. Every package added lengthens the cold start.
+- **Nothing is instrumented for free.** `NodeSDK` configures the exporter, the resource and W3C propagation from the `OTEL_*` variables, but no OpenTelemetry package instruments `Bun.serve`, Bun's `fetch`, `Bun.sql` or `Bun.redis` (the Node `http` and `undici` instrumentations don't see them). Incoming requests need `@hono/otel` (Hono) or a hand-written wrapper (`Bun.serve`); outgoing `fetch` calls need `propagation.inject` for the callee to join the trace.
+- **A code push is a deploy.** The variables land on the next deploy, and `update-function-source-code` or `railway functions push` is one, so a single push adds the SDK and picks up the variables.
+
+Recipe:
+
+1. Turn tracing on for the function with `set-service-tracing` if `get-tracing` shows it off. Leave `autoInstrumentationEnabled` off; it does nothing for Bun.
+2. Set the exporter variables. `NodeSDK` exports metrics and logs over OTLP by default and the receiver rejects both:
+
+   ```bash
+   railway variable set OTEL_METRICS_EXPORTER=none OTEL_LOGS_EXPORTER=none --service <function> --skip-deploys
+   ```
+
+3. Read the code with `get-function-source-code`: `code` is what is current, `deployedCode` what runs, `staged` whether a commit is pending. Edit that, never a version recalled from memory.
+4. Add the SDK block at the top and wrap the requests, leaving the rest of the file as it is. A Hono function ends up like this:
+
+   ```typescript
+   import { NodeSDK } from "@opentelemetry/sdk-node@0.222.0";
+   import { trace } from "@opentelemetry/api@1";
+   import { Hono } from "hono@4";
+   import { httpInstrumentationMiddleware } from "@hono/otel@1";
+
+   // Reads OTEL_EXPORTER_OTLP_*, OTEL_SERVICE_NAME and OTEL_TRACES_SAMPLER*
+   // from the variables Railway provides. Nothing to configure.
+   const sdk = new NodeSDK();
+   sdk.start();
+   process.on("SIGTERM", () => sdk.shutdown().finally(() => process.exit(0)));
+
+   const tracer = trace.getTracer("greeter");
+
+   const app = new Hono();
+   // One SERVER span per request, continuing the edge's traceparent.
+   app.use(httpInstrumentationMiddleware());
+
+   app.get("/hello/:name", async (c) => {
+     const name = c.req.param("name");
+     const greeting = await tracer.startActiveSpan("build-greeting", async (span) => {
+       try {
+         span.setAttribute("greeting.name", name);
+         return `Hello, ${name}`;
+       } finally {
+         span.end();
+       }
+     });
+     return c.json({ greeting });
+   });
+
+   export default { port: Number(Bun.env.PORT ?? 3000), fetch: app.fetch };
+   ```
+
+   For a function that calls `Bun.serve` itself, wrap its `fetch` handler: take the parent from `propagation.extract(context.active(), req.headers, { get: (h, k) => h.get(k) ?? undefined, keys: (h) => [...h.keys()] })` and run the handler inside `tracer.startActiveSpan(name, { kind: SpanKind.SERVER }, parent, ...)`. For an outgoing call, start a `SpanKind.CLIENT` span and `propagation.inject(context.active(), headers, { set: (h, k, v) => h.set(k, v) })` into a `Headers` object before `fetch`. A cron or script function has no server: its spans are new roots (sampled at the project rate through the sampler variables) and it must `await sdk.shutdown()` as its last statement, or the batch never leaves the process. The docs page has all three in full.
+
+5. Write it back with `update-function-source-code` (the whole file; pass `staged: true` to stage instead of deploying live) or `railway functions push --path <file>`. This deploy also adds the variables.
+6. Verify with the steps below: `curl -sI https://<domain>/hello/x | grep -i x-railway-trace-id`, then `get-trace` on the ID. A span with `component` `service` and scope `@hono/otel` (or the tracer name) means the function exports. If the deploy logs show `bun install` failing, an import specifier is wrong; if they show OTLP export errors for metrics or logs, step 2 was skipped.
+
+Docs: [Functions](https://docs.railway.com/observability/tracing/functions).
 
 ## Sampling
 
@@ -158,10 +224,13 @@ Workflow for "why is this request slow / failing":
 - **App spans appear as separate traces** (`list-traces` shows service-rooted traces with `hasEdge` false next to edge-only ones): the SDK isn't reading `traceparent`. Enable the W3C Trace Context propagator and make sure nothing in front of the handlers strips the header.
 - **SDK logs metrics or logs export errors**: set `OTEL_METRICS_EXPORTER=none` and `OTEL_LOGS_EXPORTER=none`.
 - **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it to manual instrumentation.
+- **A Function shows edge spans only**: automatic instrumentation can't help (Bun); the SDK has to be in the file. Check `get-function-source-code` for the `NodeSDK` block and the request wrapper, that the deploy logs show `bun install` succeeding, and that `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER` are `none`. See [Instrument a Function (Bun)](#instrument-a-function-bun).
 - **Spans missing from a busy service**: over 1,000 spans per replica per 10 seconds. Disable noisy instrumentations or lower the sample rate.
 - **Setting `tracingSampleRate` fails validation**: the API takes a fraction 0..1, not a percentage.
 
 ## Validated against
 
-- Docs: [tracing.md](https://docs.railway.com/observability/tracing), [automatic-instrumentation.md](https://docs.railway.com/observability/tracing/automatic-instrumentation), [nodejs.md](https://docs.railway.com/observability/tracing/nodejs), [variables/reference.md](https://docs.railway.com/variables/reference)
-- Platform source (railwayapp/mono): `common/javascript/models/src/tracingVariables.ts` (provided variables and precedence), `packages/backboard/src/graphql/v2/schema/schema.graphql` (`Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled`, `ProjectUpdateInput`, `ServiceUpdateInput`), `packages/hikari/src/settings/tunables.rs` (default sample rate), `packages/stacker-oteld/configs/main.go` (span limit), `packages/backboard/src/handlers/http/routes/mcp/tools/listTraces.ts` and `getTrace.ts` (MCP tools)
+- Docs: [tracing.md](https://docs.railway.com/observability/tracing), [automatic-instrumentation.md](https://docs.railway.com/observability/tracing/automatic-instrumentation), [nodejs.md](https://docs.railway.com/observability/tracing/nodejs), [functions.md](https://docs.railway.com/observability/tracing/functions), [functions.md](https://docs.railway.com/functions), [variables/reference.md](https://docs.railway.com/variables/reference)
+- Platform source (railwayapp/mono): `common/javascript/models/src/tracingVariables.ts` (provided variables and precedence), `common/javascript/models/src/functions.ts` and `services.ts` (function start command, image prefix), `packages/backboard/src/graphql/v2/schema/schema.graphql` (`Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled`, `ProjectUpdateInput`, `ServiceUpdateInput`), `packages/hikari/src/settings/tunables.rs` (default sample rate), `packages/stacker-oteld/configs/main.go` (span limit), `packages/backboard/src/handlers/http/routes/mcp/tools/listTraces.ts`, `getTrace.ts`, `getTracing.ts`, `setProjectTracing.ts`, `setServiceTracing.ts`, `getFunctionSourceCode.ts` and `updateFunctionSourceCode.ts` (MCP tools)
+- Function runtime (railwayapp/code-images): `bun/Dockerfile` (Bun 1.4.0), `bun/run.sh` (import scan, `bun install` per start, `bun run --smol index.tsx`)
+- Function examples run on Bun 1.4.0 with `@opentelemetry/sdk-node` 0.222.0 and `@hono/otel` 1.1.2 against a stub OTLP receiver: server span continues the incoming `traceparent`, client span propagates it, script flushes on `sdk.shutdown()`
