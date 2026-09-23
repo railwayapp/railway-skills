@@ -1,6 +1,6 @@
 # Tracing
 
-Trace a request from Railway's edge through a service and into the services it calls, and read the result with the `list-traces` and `get-trace` MCP tools or on the project's **Traces** tab.
+Trace a request from Railway's edge through a service and into the services it calls. Turn tracing on with the `set-service-tracing` and `set-project-tracing` MCP tools and read the result with `list-traces` and `get-trace`, or do both on the project's **Traces** tab.
 
 Tracing is a preview feature. If the project has no **Traces** tab, the account needs **Tracing** enabled in Priority Boarding first.
 
@@ -17,41 +17,46 @@ Tracing has three settings. The project default (`tracingEnabled`) and the sampl
 
 **Dashboard:** open the **Traces** tab → **Tracing setup**. Toggle **Trace requests by default** under Project, optionally set a **Sample rate** (percentage), and use each service row's **Traced** switch for overrides and **Automatic instrumentation** / **Manual instrumentation** to pick how it exports spans. The same controls are on the service under **Settings → Tracing**.
 
-**Agent path:** the `get-tracing`, `set-project-tracing` and `set-service-tracing` MCP tools. `get-tracing` takes `projectId` and an optional `serviceId` and returns the project default, the sample rate and, per service, its override, the resolved state and the automatic instrumentation switch. `set-project-tracing` takes `tracingEnabled` and `sampleRate` (a fraction 0..1, `null` resets to Railway's default). `set-service-tracing` takes `tracingEnabled` (`true`/`false` pins, `null` follows the project) and `autoInstrumentationEnabled`. Tracing is a service-wide setting, not per environment. Read the settings back before changing them, and ask before changing the project default or the sample rate on the user's behalf.
+**Agent path:** three MCP tools read and change these settings, and `railway trace` does the same from the CLI. Resolve IDs from the URL or `railway status --json` first, and read before writing. On a Railway cloud agent in a dashboard chat session the `railway` CLI is unauthenticated, so resolve IDs with `list-services` and stay on the MCP tools throughout.
 
-Without MCP, `railway api` with the public `projectUpdate` and `serviceUpdate` mutations does the same. Resolve IDs from the URL or `railway status --json` first.
+| Tool | Access | Purpose |
+|---|---|---|
+| `get-tracing` | viewer | The project default (`tracingEnabled`, `sampleRate`) and, per service, `tracingOverride` (`true`/`false` pinned, `null` follows the project), the resolved `tracingEnabled`, `autoInstrumentationEnabled` and whether it is `autoInstrumentationActive`. Pass `serviceId` for one service, omit it for every service in the project |
+| `set-service-tracing` | member | `tracingEnabled` `true`/`false` pins one service regardless of the project default, `null` makes it follow the project again; `autoInstrumentationEnabled` switches OBI for the service. Each is optional and independent; omit what should stay as it is. Service-wide, not per environment |
+| `set-project-tracing` | member | `tracingEnabled` sets the project default for every service without an override; `sampleRate` is the fraction of client-facing requests the edge traces, `0..1`, `null` resets to Railway's default of every request. Each is optional |
 
-```bash
-# Trace every service in the project by default, at Railway's default sample rate
-railway api \
-  'mutation enableTracing($id: String!) {
-    projectUpdate(id: $id, input: { tracingEnabled: true }) { tracingEnabled tracingSampleRate }
-  }' \
-  --variables '{"id":"<project-id>"}'
+All three take `projectId`. `describe-service` reports the same tracing state for one service.
 
-# Trace 25% of client-facing requests instead; null resets to the default
-railway api \
-  'mutation setRate($id: String!, $rate: Float) {
-    projectUpdate(id: $id, input: { tracingSampleRate: $rate }) { tracingSampleRate }
-  }' \
-  --variables '{"id":"<project-id>","rate":0.25}'
-
-# Pin one service on or off regardless of the project default (null follows the project)
-railway api \
-  'mutation traceService($id: String!, $on: Boolean) {
-    serviceUpdate(id: $id, input: { tracingEnabled: $on }) { tracingEnabled }
-  }' \
-  --variables '{"id":"<service-id>","on":true}'
-
-# Turn on automatic instrumentation for a service whose tracing is on
-railway api \
-  'mutation autoInstrument($id: String!) {
-    serviceUpdate(id: $id, input: { autoInstrumentationEnabled: true }) { tracingEnabled autoInstrumentationEnabled }
-  }' \
-  --variables '{"id":"<service-id>"}'
+```text
+Get tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb
 ```
 
-`tracingSampleRate` is a fraction from 0 to 1 in the API; the dashboard shows it as a percentage. Read the settings back with `project(id) { tracingEnabled tracingSampleRate }` and `service(id) { tracingEnabled autoInstrumentationEnabled }`.
+```text
+Set service tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, service <service-id>: tracingEnabled true
+```
+
+```text
+Set project tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb: tracingEnabled true, sampleRate 0.25
+```
+
+```text
+Set service tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, service <service-id>: autoInstrumentationEnabled true
+```
+
+The sample rate is a fraction from 0 to 1 in the tools and the API; the dashboard shows it as a percentage. `set-service-tracing` warns when it switches auto-instrumentation on for a service whose tracing is off: the switch does nothing until the service, or the project default, is enabled. Without Railway MCP or `railway trace`, the public `projectUpdate` (`tracingEnabled`, `tracingSampleRate`) and `serviceUpdate` (`tracingEnabled`, `autoInstrumentationEnabled`) mutations through `railway api` set the same fields; see [request.md](request.md). That fallback needs an authenticated CLI, which a cloud agent's chat session does not have.
+
+**CLI:** `railway trace` (aliases `traces`, `tracing`) sets the same fields. Use it when the user works in a linked repo or wants exact command output; on a cloud agent's chat session the CLI is unauthenticated, so stay on MCP there.
+
+```bash
+railway trace status --all                              # project default, every service, last edge/app span
+railway trace enable --service <service>                # pin tracing on for one service
+railway trace enable --auto-instrument                  # tracing plus OBI for the linked service
+railway trace enable --project-default --sample-rate 0.25
+railway trace disable --auto-instrument                 # pin tracing off and switch OBI off
+railway trace inherit                                   # follow the project default again
+```
+
+Tracing is service-wide, so `--environment` only scopes `status`, `list` and `get`; pass `--project <id> --environment <name>` when nothing is linked. `--json` prints one document with the project default and the service state. Changing tracing needs a user or workspace token; a project token (`RAILWAY_TOKEN`) can only read. The CLI has no switch for auto-instrumentation alone: `railway trace disable --auto-instrument` followed by `railway trace enable` leaves tracing on and OBI off.
 
 What happens next:
 
@@ -60,6 +65,8 @@ What happens next:
 - The OpenTelemetry variables below are added on the **next deploy**. An app with an SDK exports nothing until it is redeployed: `railway redeploy --service <service> --yes`.
 
 ## Choose how the service exports spans
+
+**Recommend the OpenTelemetry SDK.** Spans the service exports itself are much higher quality than what automatic instrumentation can recover from outside the process: they carry the route, the query, the business identifiers and the errors the code knows about; they nest under handler-level spans, so the trace shows which step of a request took the time instead of a flat list of calls; they continue the trace through queue consumers, cron work and TLS callees; and they work in any language. Automatic instrumentation is the fallback for a service whose code can't be changed right now, or a first look while the SDK is being added. Present it as a stopgap, not the destination. When a user asks to "instrument my app", default to the SDK unless they ask for the no-code path.
 
 | | Automatic instrumentation (OBI) | OpenTelemetry SDK |
 |---|---|---|
@@ -95,11 +102,21 @@ Rules the agent must apply:
   ```
 
 - **User variables win.** A service that sets its own `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (for example to keep exporting to its own collector) gets none of the tracing variables, and its spans don't reach the Traces tab; edge spans still do. A service that sets either `OTEL_TRACES_SAMPLER` or `OTEL_TRACES_SAMPLER_ARG` keeps both of its own and Railway adds neither. Check `railway variable list --service <service> --json` before assuming the provided values apply.
-- **Load the SDK first.** Auto-instrumentation packages patch libraries at import time, so the SDK must be loaded before the app's modules: a `--require`/`--import` flag in the start command, `NODE_OPTIONS`, a Python `opentelemetry-instrument` wrapper, a Java `-javaagent`, and so on. Set it with `railway environment edit --service-config <service> deploy.startCommand "<command>"` or as a variable; see [deploy.md](deploy.md).
+- **Load the SDK first.** Instrumentation libraries (`@opentelemetry/auto-instrumentations-node`, `opentelemetry-instrumentation-*` and the like) patch libraries at import time, so the SDK must be loaded before the app's modules: a `--require`/`--import` flag in the start command, `NODE_OPTIONS`, a Python `opentelemetry-instrument` wrapper, a Java `-javaagent`, and so on. Set it with `railway environment edit --service-config <service> deploy.startCommand "<command>"` or as a variable; see [deploy.md](deploy.md).
 - **Keep W3C Trace Context propagation on** (the SDK default in most languages; Go requires setting the propagator explicitly) so the service continues the edge's trace instead of starting its own.
 - **Don't override `OTEL_SERVICE_NAME`** unless the user wants spans attributed under a different name than the Railway service.
 
 Per-language install steps, framework notes, and a custom-span example are in the docs: [Node.js](https://docs.railway.com/observability/tracing/nodejs), [Deno](https://docs.railway.com/observability/tracing/deno), [Functions (Bun)](https://docs.railway.com/observability/tracing/functions), [Python](https://docs.railway.com/observability/tracing/python), [Go](https://docs.railway.com/observability/tracing/go), [Java](https://docs.railway.com/observability/tracing/java), [Ruby](https://docs.railway.com/observability/tracing/ruby), [.NET](https://docs.railway.com/observability/tracing/dotnet), [Rust](https://docs.railway.com/observability/tracing/rust), [PHP](https://docs.railway.com/observability/tracing/php). Fetch the page for the user's stack rather than reciting SDK commands from memory.
+
+## What to instrument
+
+Instrumentation libraries give a trace its skeleton: a server span per request and a client span per call a library recognises. On its own that is barely better than automatic instrumentation. The value comes from spans the app opens itself around the units of work its authors think in. When adding tracing to a codebase, or when asked what to instrument, cover these three layers, in this order:
+
+1. **Inbound work.** One span per HTTP handler, gRPC method, queue or job consumer invocation, cron run and WebSocket message. The HTTP and gRPC server instrumentations usually cover handlers. Consumers, cron and background jobs are not covered by the edge or by most instrumentations, so wrap each message or run in its own span (kind `CONSUMER` or `INTERNAL`) and, where the message carries a `traceparent`, continue that context so the trace links back to the producer. Without this, background work is invisible or shows up as orphaned client spans.
+2. **I/O: database queries, cache calls, outgoing HTTP and gRPC calls, queue publishes.** This is where latency and failures hide. Use the driver or client instrumentation where one exists. Where none does (a raw socket client, a vendor SDK the instrumentations don't know), wrap the call in a `CLIENT` span with the standard `db.*`, `server.address` or `url.full` attributes. Every remote call should be visible as its own span.
+3. **Logical units of work.** A function that groups several I/O calls into one meaningful step (`checkout`, `syncUser`, `renderInvoice`), or one that is CPU-heavy on its own (parsing a large payload, image resizing, template rendering, serialising a big response). Give each an `INTERNAL` span carrying the identifiers a person debugging it would want (`order.id`, `tenant`, item counts). This turns twelve sibling `SELECT` spans under a handler into a tree that reads like the code and says which step took the time. Rule of thumb: if you would want log lines saying "starting X" and "finished X in N ms", X is a span.
+
+Keep spans out of tight loops and trivial helpers. A span per item in a loop of thousands hits the per-replica export limit (see Sampling) and adds nothing a `count` attribute on the parent wouldn't; instrument the loop, not the iteration. Name spans with low-cardinality names (`GET /users/{id}`, `db.query users`, `process order`) and put the variable parts in attributes. Set span status to `ERROR` and record the exception when a unit fails, so `@status:error` finds it. Never put secrets, tokens or raw personal data in span names or attributes.
 
 ## Instrument a Function (Bun)
 
@@ -109,12 +126,12 @@ What differs from a repo service:
 
 - **One file, no start command.** There is no `--require`, `--preload` or `bunfig.toml`. Put the SDK setup at the top of the file. It runs before `Bun.serve` takes its first request, which is all that is needed, because nothing gets monkey-patched.
 - **Dependencies come from imports.** The runtime turns every bare import into a `package.json` entry and runs `bun install` at every cold start, without a cache. Pin with `pkg@version` specifiers: `hono@4`, `@hono/otel@1`, `@opentelemetry/api@1`, and `@opentelemetry/sdk-node` to the exact `0.x` version tested, since it has no stable major. Every package added lengthens the cold start.
-- **Nothing is instrumented for free.** `NodeSDK` configures the exporter, the resource and W3C propagation from the `OTEL_*` variables, but no OpenTelemetry package instruments `Bun.serve`, Bun's `fetch`, `Bun.sql` or `Bun.redis` (the Node `http` and `undici` instrumentations don't see them). Incoming requests need `@hono/otel` (Hono) or a hand-written wrapper (`Bun.serve`); outgoing `fetch` calls need `propagation.inject` for the callee to join the trace.
+- **Nothing is instrumented for free.** `NodeSDK` configures the exporter, the resource and W3C propagation from the `OTEL_*` variables, but no OpenTelemetry package instruments `Bun.serve`, Bun's `fetch`, `Bun.sql` or `Bun.redis` (the Node `http` and `undici` instrumentations don't see them). Incoming requests need `@hono/otel` (Hono) or a hand-written wrapper (`Bun.serve`); outgoing `fetch` calls need `propagation.inject` for the callee to join the trace. The three layers in [What to instrument](#what-to-instrument) still apply; the function's handlers, I/O and logical units are what to wrap.
 - **A code push is a deploy.** The variables land on the next deploy, and `update-function-source-code` or `railway functions push` is one, so a single push adds the SDK and picks up the variables.
 
 Recipe:
 
-1. Turn tracing on for the function with `set-service-tracing` if `get-tracing` shows it off. Leave `autoInstrumentationEnabled` off; it does nothing for Bun.
+1. Turn tracing on for the function with `set-service-tracing` (or `railway trace enable --service <function>`) if `get-tracing` shows it off. Leave `autoInstrumentationEnabled` off; it does nothing for Bun.
 2. Set the exporter variables. `NodeSDK` exports metrics and logs over OTLP by default and the receiver rejects both:
 
    ```bash
@@ -181,7 +198,7 @@ Docs: [Functions](https://docs.railway.com/observability/tracing/functions).
 
 ## Read traces
 
-Traces are read through **Remote MCP** or the dashboard. There is no `railway` CLI command for them, and the GraphQL trace queries are not on the public API, so `railway api` cannot fetch them.
+Traces are read through **Remote MCP** (the default agent path), `railway trace list` and `railway trace get` on the CLI, or the dashboard. The `traces`, `trace` and `tracingStatus` queries are on the public GraphQL API as well, so `railway api` can fetch them where neither fits.
 
 | Tool | Access | Purpose |
 |---|---|---|
@@ -200,10 +217,18 @@ Get trace 4bf92f3577b34da6a3ce929d0e0e4736 for project 6adb5ae3-0e3a-4ead-b42c-1
 
 `filter` uses the same syntax as logs: `@status:error`, `@component:edge AND @duration:>1000`, `@service:api AND @kind:client`, `@http.route:/checkout AND @http.response.status_code:500`, `@name:SELECT*`. Built-in fields are `trace`, `span`, `name`, `serviceName`, `service`, `deployment`, `replica`, `component` (`edge`, `proxy`, `service`), `kind`, `status`, `duration` (ms); any other `@key` matches a span or resource attribute, free text matches the span name, and `-` negates. Narrow the filter or the window before raising `limit`.
 
+On the CLI, `list` scopes to the linked service unless `--all`, `--since`/`--until` take relative (`30m`, `2h`, `1d`) or ISO 8601 times, `--limit` is 1 to 500 (default 100), `--errors` adds `@status:error`, and `get --max-spans` goes up to 2000. Human output is a table and an indented span tree; `--json` prints one trace summary or one span per line, like `railway logs --json`.
+
+```bash
+railway trace list --since 30m --errors --json
+railway trace list --all --filter '@http.route:/api/users @duration:>500'
+railway trace get 4bf92f3577b34da6a3ce929d0e0e4736 --json
+```
+
 Workflow for "why is this request slow / failing":
 
-1. `list-traces` with a filter that isolates the symptom (`@status:error`, `@duration:>1000`, `@http.route:<route>`), optionally `serviceId` for one service.
-2. `get-trace` on a returned `traceId`. The tree runs from the edge span down through every service; the `component` on each span says which hop exported it, and a span with `ERROR` status carries the message.
+1. `list-traces` (or `railway trace list`) with a filter that isolates the symptom (`@status:error`, `@duration:>1000`, `@http.route:<route>`), optionally `serviceId` for one service.
+2. `get-trace` (or `railway trace get`) on a returned `traceId`. The tree runs from the edge span down through every service; the `component` on each span says which hop exported it, and a span with `ERROR` status carries the message.
 3. Read the span attributes in the structured result for the detail (`http.route`, `http.response.status_code`, `db.statement`, custom attributes).
 
 ## Verify tracing works
@@ -214,23 +239,23 @@ Workflow for "why is this request slow / failing":
    curl -sI https://<domain>/ | grep -i x-railway-trace-id
    ```
 
-2. **Fetch that trace** with `get-trace` and the returned ID. Edge and proxy spans confirm tracing is on; a span with `component` `service` confirms the app is exporting. After enabling an SDK, that only happens once the redeploy that added the variables is live; after enabling automatic instrumentation, allow about a minute.
+2. **Fetch that trace** with `get-trace` or `railway trace get <trace-id>` and the returned ID. Edge and proxy spans confirm tracing is on; a span with `component` `service` confirms the app is exporting. After enabling an SDK, that only happens once the redeploy that added the variables is live; after enabling automatic instrumentation, allow about a minute.
 3. **Or watch the dashboard.** The Traces tab is at `https://railway.com/project/<project-id>/traces?environmentId=<environment-id>`; its **Trace ID** field accepts a bare 32-hex ID or a whole `traceparent` header. In **Tracing setup**, each service row shows when the edge and the app last exported a span, and the **App** indicator turns green on the first span from the service itself.
 
 ## Troubleshoot
 
-- **No traces at all**: confirm `tracingEnabled` resolves to true for the service (service override, then project default), the service has a public domain, and the account has Tracing in Priority Boarding. With a low rate and little traffic, force one with the `traceparent` curl above, then `get-trace` it.
+- **No traces at all**: confirm `get-tracing` or `railway trace status` reports tracing on for the service (its override, then the project default), the service has a public domain, and the account has Tracing in Priority Boarding. With a low rate and little traffic, force one with the `traceparent` curl above, then `get-trace` it.
 - **Edge spans only, nothing from the app** (`get-trace` shows only `edge` and `proxy` components): the variables land on the next deploy, so redeploy. Then check the service doesn't set its own `OTEL_EXPORTER_OTLP_ENDPOINT`, the SDK loads before the app serves, and, for OBI, the process is a supported runtime handling HTTP or gRPC.
 - **App spans appear as separate traces** (`list-traces` shows service-rooted traces with `hasEdge` false next to edge-only ones): the SDK isn't reading `traceparent`. Enable the W3C Trace Context propagator and make sure nothing in front of the handlers strips the header.
 - **SDK logs metrics or logs export errors**: set `OTEL_METRICS_EXPORTER=none` and `OTEL_LOGS_EXPORTER=none`.
-- **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it to manual instrumentation.
-- **A Function shows edge spans only**: automatic instrumentation can't help (Bun); the SDK has to be in the file. Check `get-function-source-code` for the `NodeSDK` block and the request wrapper, that the deploy logs show `bun install` succeeding, and that `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER` are `none`. See [Instrument a Function (Bun)](#instrument-a-function-bun).
+- **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it off with `set-service-tracing` (`autoInstrumentationEnabled` false), or on the CLI `railway trace disable --auto-instrument` then `railway trace enable`.
 - **Spans missing from a busy service**: over 1,000 spans per replica per 10 seconds. Disable noisy instrumentations or lower the sample rate.
-- **Setting `tracingSampleRate` fails validation**: the API takes a fraction 0..1, not a percentage.
+- **A Function shows edge spans only**: automatic instrumentation can't help (Bun); the SDK has to be in the file. Check `get-function-source-code` for the `NodeSDK` block and the request wrapper, that the deploy logs show `bun install` succeeding, and that `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER` are `none`. See [Instrument a Function (Bun)](#instrument-a-function-bun).
+- **Setting the sample rate fails validation**: `set-project-tracing`, `railway trace enable --project-default --sample-rate` and the API take a fraction 0..1, not a percentage.
 
 ## Validated against
 
-- Docs: [tracing.md](https://docs.railway.com/observability/tracing), [automatic-instrumentation.md](https://docs.railway.com/observability/tracing/automatic-instrumentation), [nodejs.md](https://docs.railway.com/observability/tracing/nodejs), [functions.md](https://docs.railway.com/observability/tracing/functions), [functions.md](https://docs.railway.com/functions), [variables/reference.md](https://docs.railway.com/variables/reference)
-- Platform source (railwayapp/mono): `common/javascript/models/src/tracingVariables.ts` (provided variables and precedence), `common/javascript/models/src/functions.ts` and `services.ts` (function start command, image prefix), `packages/backboard/src/graphql/v2/schema/schema.graphql` (`Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled`, `ProjectUpdateInput`, `ServiceUpdateInput`), `packages/hikari/src/settings/tunables.rs` (default sample rate), `packages/stacker-oteld/configs/main.go` (span limit), `packages/backboard/src/handlers/http/routes/mcp/tools/listTraces.ts`, `getTrace.ts`, `getTracing.ts`, `setProjectTracing.ts`, `setServiceTracing.ts`, `getFunctionSourceCode.ts` and `updateFunctionSourceCode.ts` (MCP tools)
+- Docs: [tracing.md](https://docs.railway.com/observability/tracing), [automatic-instrumentation.md](https://docs.railway.com/observability/tracing/automatic-instrumentation), [nodejs.md](https://docs.railway.com/observability/tracing/nodejs), [tracing/functions.md](https://docs.railway.com/observability/tracing/functions), [functions.md](https://docs.railway.com/functions), [variables/reference.md](https://docs.railway.com/variables/reference)
+- Platform source (railwayapp/mono): `common/javascript/models/src/tracingVariables.ts` (provided variables and precedence), `common/javascript/models/src/functions.ts` and `services.ts` (function start command, image prefix), `packages/backboard/src/graphql/v2/schema/schema.graphql` (`Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled`, `ProjectUpdateInput`, `ServiceUpdateInput`), `packages/hikari/src/settings/tunables.rs` (default sample rate), `packages/stacker-oteld/configs/main.go` (span limit), `packages/backboard/src/handlers/http/routes/mcp/tools/listTraces.ts`, `getTrace.ts`, `getTracing.ts`, `setServiceTracing.ts`, `setProjectTracing.ts`, `tracingMcpHelpers.ts`, `getFunctionSourceCode.ts` and `updateFunctionSourceCode.ts` (MCP tools)
 - Function runtime (railwayapp/code-images): `bun/Dockerfile` (Bun 1.4.0), `bun/run.sh` (import scan, `bun install` per start, `bun run --smol index.tsx`)
 - Function examples run on Bun 1.4.0 with `@opentelemetry/sdk-node` 0.222.0 and `@hono/otel` 1.1.2 against a stub OTLP receiver: server span continues the incoming `traceparent`, client span propagates it, script flushes on `sdk.shutdown()`

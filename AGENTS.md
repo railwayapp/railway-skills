@@ -40,7 +40,7 @@ References:
 | Inspect costs or manage limits | `references/usage.md` | Workspace/project/service usage and workspace/agent spending limits |
 | Run coding agents on Railway | `references/cloud-agents.md` | Cloud agent lifecycle, harness launches, desktop SSH setup |
 | Check health or debug failures | `references/operate.md` | Status, logs, metrics, build/runtime triage, recovery |
-| Trace requests across services | `references/tracing.md` | Enable tracing, automatic (eBPF) vs SDK instrumentation, instrumenting a Function (Bun), provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools |
+| Trace requests across services | `references/tracing.md` | Enable tracing with the `get-tracing` / `set-service-tracing` / `set-project-tracing` MCP tools or `railway trace`, SDK instrumentation (preferred) vs automatic (eBPF), what to instrument, instrumenting a Function (Bun), provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools or `railway trace list` / `get` |
 | Use a sandbox or build remotely | `references/sandbox.md` | Sandboxes: create/fork, remote exec, remote template builds, checkpoints, port forwarding (requires Priority Boarding) |
 | Analyze databases | `references/analyze-db.md` | Database introspection and performance analysis, then DB-specific refs |
 | Request from API, docs, or community | `references/request.md` | GraphQL mutations, metrics queries, Central Station, official docs |
