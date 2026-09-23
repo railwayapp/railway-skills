@@ -104,7 +104,7 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.5.3" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.5.4" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
@@ -128,7 +128,7 @@ Check once per session and don't re-run it after acting; the restart prompt to t
 
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.5.3` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.5.4` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
@@ -301,7 +301,7 @@ For anything beyond quick operations, load the references needed for the user's 
 | Inspect costs or manage spending limits | [usage.md](references/usage.md) | Workspace/project/service usage, billing periods, workspace and Railway Agent limits |
 | Run a coding agent on Railway ("cloud agent", "railway ca", "railway code", "desktop SSH") | [cloud-agents.md](references/cloud-agents.md) | Provision, connect, wake, sleep, delete, or configure desktop access to cloud agent VMs |
 | Check health or debug failures | [operate.md](references/operate.md) | Status, logs, metrics, build/runtime triage, recovery |
-| Trace requests across services ("tracing", "traces", "trace ID", "spans", "OpenTelemetry", "OTel", "OTLP", "instrument my app", "auto-instrumentation") | [tracing.md](references/tracing.md) | Enable tracing per project or service with the `get-tracing` / `set-service-tracing` / `set-project-tracing` MCP tools, SDK instrumentation (preferred) vs automatic (eBPF), what to instrument, the provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools, the Traces tab |
+| Trace requests across services ("tracing", "traces", "trace ID", "spans", "OpenTelemetry", "OTel", "OTLP", "instrument my app", "auto-instrumentation") | [tracing.md](references/tracing.md) | Enable tracing per project or service with the `get-tracing` / `set-service-tracing` / `set-project-tracing` MCP tools or `railway trace enable`, SDK instrumentation (preferred) vs automatic (eBPF), what to instrument, the provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools or `railway trace list` / `get`, the Traces tab |
 | Use a sandbox or build remotely ("sandbox", "scratch environment", "ephemeral box", "build remotely", "remote build", "run this remotely", "checkpoint", "snapshot/save/restore sandbox state") | [sandbox.md](references/sandbox.md) | Create/fork sandboxes, run commands remotely, remote template builds, checkpoints (save/restore sandbox state), port forwarding, teardown. Requires Sandboxes enabled in Priority Boarding — if unavailable, prompt the user to enable it. |
 | Request from API, docs, or community | [request.md](references/request.md) | Railway GraphQL API queries/mutations, metrics queries, Central Station, official docs |
 
@@ -346,7 +346,7 @@ Multi-step workflows follow natural chains:
 - **First deploy**: setup (create project + service), configure (set variables and source), deploy, operate (verify healthy)
 - **Fix a failure**: operate (triage logs), configure (fix config/variables), deploy (redeploy), operate (verify recovery)
 - **Add a domain**: configure (add domain + set port), operate (verify DNS and service health)
-- **Add tracing**: tracing (enable for the project or service with `set-project-tracing` / `set-service-tracing`, prefer SDK instrumentation over automatic, add spans around inbound work, I/O and logical units), configure (set `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER`, start command), deploy (redeploy so the `OTEL_*` variables land), tracing (verify with `x-railway-trace-id` and `get-trace`)
+- **Add tracing**: tracing (enable for the project or service with `set-project-tracing` / `set-service-tracing` or `railway trace enable`, prefer SDK instrumentation over automatic, add spans around inbound work, I/O and logical units), configure (set `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER`, start command), deploy (redeploy so the `OTEL_*` variables land), tracing (verify with `x-railway-trace-id` and `get-trace` or `railway trace get`)
 - **Docs to action**: request (fetch docs answer), route to the relevant operational reference
 
 When composing, return one unified response covering all steps. Don't ask the user to invoke each step separately.
