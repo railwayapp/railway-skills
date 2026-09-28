@@ -113,6 +113,8 @@ const media = bucket("media", { region: "iad" });
 const backend = group("Backend", [api, worker, db]);
 ```
 
+A traced service also carries `tracing: { enabled: true, autoInstrumentation: true }`, which `config pull` renders but the `service()` helper does not pass through yet; see [Infrastructure as code in tracing.md](tracing.md#infrastructure-as-code) before applying a plan that touches `tracing`.
+
 Advanced placement can map regions to replica counts:
 
 ```ts
