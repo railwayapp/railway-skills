@@ -104,7 +104,7 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.5.6" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.5.7" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
@@ -128,7 +128,7 @@ Check once per session and don't re-run it after acting; the restart prompt to t
 
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.5.6` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.5.7` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
@@ -294,7 +294,7 @@ For anything beyond quick operations, load the references needed for the user's 
 | **Analyze a database** ("analyze \<url\>", "analyze db", "analyze database", "analyze service", "introspect", "check my postgres/redis/mysql/mongo") | [analyze-db.md](references/analyze-db.md) | Database introspection and performance analysis. analyze-db.md directs you to the DB-specific reference. **This takes priority over the status/operate routes when a Railway URL to a database service is provided alongside "analyze".** |
 | Create or connect resources | [setup.md](references/setup.md) | Projects, services, databases, buckets, templates, workspaces |
 | Ship code or manage releases | [deploy.md](references/deploy.md) | Deploy, redeploy, restart, build config, monorepo, Dockerfile |
-| Change configuration | [configure.md](references/configure.md) | Environments, variables, config patches, domains, networking |
+| Change configuration ("webhook", "notify on deploy", "custom header", "Slack/Discord notifications") | [configure.md](references/configure.md) | Environments, variables, config patches, domains, networking, project webhooks with the `list-webhooks` / `create-webhook` / `update-webhook` / `test-webhook` / `delete-webhook` MCP tools and their custom headers |
 | Manage feature flags | [feature-flags.md](references/feature-flags.md) | MCP registry operations; CLI targeting rules and rollouts; SDK runtime reads |
 | Define configuration in source control ("IaC", "infrastructure as code", "config as code", `.railway/railway.ts`, `.railway/railway.py`, `.railway/railway.go`, "config migrate/plan/apply/pull") | [iac.md](references/iac.md) | Author/import IaC, migrate legacy JSON/TOML, save and apply reviewed plans, check drift |
 | Manage databases ("PITR", "restore", "backup", "HA", "failover", "switchover", "PgBouncer", "connection pooling") | [databases.md](references/databases.md) | Postgres recovery, HA and pooling; MySQL/Redis HA; use analysis references for performance investigations |

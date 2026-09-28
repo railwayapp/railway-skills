@@ -278,6 +278,36 @@ railway domain delete example.com --service <service> --yes --json
 
 Domain deletion is destructive. Confirm the domain and service before running it.
 
+## Webhooks
+
+Project webhooks POST a JSON payload to a URL whenever a chosen deployment, monitor, or volume-alert event happens anywhere in the project. They are project-scoped, not per service or environment, and are managed with five MCP tools. There is no `railway webhook` CLI command. Resolve the project ID from `railway status --json` or `list-projects` first.
+
+| Tool | Purpose |
+|---|---|
+| `list-webhooks` | Every webhook in the project: URL, `eventTypes`, `includePreviewEnvironments`, the names of its custom headers (`headerNames`), and the `id` the other tools take |
+| `create-webhook` | `url` plus optional `eventTypes` (defaults to `Deployment.failed`, `Deployment.crashed`, `Deployment.oom_killed`), `includePreviewEnvironments` (defaults to `true`), and `headers` |
+| `update-webhook` | `webhookId` plus any of `url`, `eventTypes`, `includePreviewEnvironments`, `headers`. Only the fields passed change; `eventTypes` and `headers` each replace the whole set |
+| `test-webhook` | POST a sample event and report the HTTP status. Pass `url` (and optional `headers`) to try a new endpoint, or `webhookId` to send to an existing webhook with its stored URL and headers. Nothing is stored |
+| `delete-webhook` | Remove a webhook by `webhookId`. Destructive; confirm the URL with the user first |
+
+Discord and Slack incoming-webhook URLs are detected and receive a formatted message instead of the raw JSON. Run `test-webhook` before `create-webhook`: Railway treats anything outside `2xx`/`3xx` as a failed delivery, and a dead endpoint is paused for 24 hours after repeated failures.
+
+```text
+Create webhook for project <project-id>: url https://hooks.example.com/railway, eventTypes Deployment.failed Deployment.crashed, headers { "Authorization": "Bearer <token>" }
+```
+
+### Custom headers
+
+A webhook can carry up to 20 custom HTTP headers, sent with every delivery and with `test-webhook`. Use them for whatever the receiver needs to trust or route the request: an `Authorization` bearer token, an API key, a shared secret the receiver compares, a routing header. This replaces the old advice of hiding a secret in the URL, which still works but leaks into logs more easily.
+
+- **Values are write-only.** They are encrypted at rest and never returned: `list-webhooks` and every other tool's output carry `headerNames` only. Keep the value in the user's secret store; Railway cannot show it again.
+- **`create-webhook` and `test-webhook`** take `headers` as a name-to-value map.
+- **`update-webhook` replaces the whole set.** Every header not listed is removed and `{}` clears them all. A `null` value keeps the stored value for that name, so a secret survives a change without being resent: `{ "Authorization": null, "X-Env": "prod" }` keeps the token and sets `X-Env`. A URL-only update carries the stored headers forward automatically.
+- **`test-webhook` with `webhookId`** sends the stored headers; any `headers` passed alongside override the stored one of the same name and the rest are still sent. Headers are validated before the request goes out, so a bad name gets a clear error instead of a `0` status.
+- **Name rules.** RFC 9110 token characters, up to 128 characters; values up to 4096 characters with no CR or LF. `Host`, `Content-Type`, `Content-Length` and the hop-by-hop headers (`Transfer-Encoding`, `Connection`, `Keep-Alive`, `Upgrade`, `TE`, `Trailer`, `Expect`) are refused, as is any name starting with `proxy-` or `x-railway-`. Two names differing only by case count as a duplicate. The dashboard form applies the same rules inline and disables Save until a bad row is fixed.
+
+Without MCP, the same fields are on the GraphQL API: `headers` inside the webhook channel config of `notificationRuleCreate` / `notificationRuleUpdate` (a `null` value keeps the stored one there too), and `webhookTest(url, payload, headers: [WebhookHeaderInput!], notificationRuleId)`. Inspect them with `railway api describe`.
+
 ## Networking commands
 
 ### Private networking
@@ -365,10 +395,13 @@ While active, browser visitors must pass a check. Non-browser API clients and we
 - **Outbound allowlist still sees old IPs**: redeploy after enabling/disabling Static Outbound IPs
 - **IPv6 still disabled**: commit the staged environment change and wait for redeploy
 - **CDN appears ineffective**: check `x-cache`, `age`, cache headers, `Set-Cookie`, `Authorization`, method, and response size
+- **Webhook header rejected**: the name is reserved (`Host`, `Content-Type`, `Content-Length`, hop-by-hop), starts with `proxy-` or `x-railway-`, duplicates another name ignoring case, or the value has a newline; rename it or drop it, and stay under 20 headers
+- **Webhook headers disappeared after an update**: `update-webhook` replaces the whole `headers` set, so a map without a name removes it; pass `null` for names to keep, or omit `headers` entirely
 - **WAF breaks API clients**: Under Attack Mode blocks non-browser traffic; disable it or scope protection to browser-facing services
 - **Multi-region patch ignored**: verify region names match the exact identifiers (`us-west2`, `us-east4-eqdc4a`, `europe-west4-drams3a`, `asia-southeast1-eqsg3a`)
 
 ## Validated against
 
-- Docs: [environment.md](https://docs.railway.com/cli/environment), [variable.md](https://docs.railway.com/cli/variable), [domain.md](https://docs.railway.com/cli/domain), [tcp-proxy.md](https://docs.railway.com/cli/tcp-proxy), [private-network.md](https://docs.railway.com/cli/private-network), [outbound-network.md](https://docs.railway.com/cli/outbound-network), [cdn.md](https://docs.railway.com/cli/cdn), [waf.md](https://docs.railway.com/cli/waf)
+- Docs: [environment.md](https://docs.railway.com/cli/environment), [variable.md](https://docs.railway.com/cli/variable), [domain.md](https://docs.railway.com/cli/domain), [tcp-proxy.md](https://docs.railway.com/cli/tcp-proxy), [private-network.md](https://docs.railway.com/cli/private-network), [outbound-network.md](https://docs.railway.com/cli/outbound-network), [cdn.md](https://docs.railway.com/cli/cdn), [waf.md](https://docs.railway.com/cli/waf), [webhooks.md](https://docs.railway.com/observability/webhooks)
+- Platform source (railwayapp/mono): `packages/backboard/src/handlers/http/routes/mcp/tools/webhooks.ts` (webhook MCP tools), `packages/backboard/src/controllers/notifications/validation.ts` (`validateWebhookHeaders`), `packages/backboard/src/graphql/v2/schema/schema.graphql` (`webhookTest`, `WebhookHeaderInput`)
 - CLI source: [environment/mod.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/environment/mod.rs), [environment/edit.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/environment/edit.rs), [variable.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/commands/variable.rs), [domain.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/domain.rs), [tcp_proxy.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/tcp_proxy.rs), [private_network.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/private_network.rs), [outbound_networking.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/outbound_networking.rs), [cdn.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/cdn.rs), [waf.rs](https://github.com/railwayapp/cli/blob/v5.23.3/src/commands/waf.rs)
