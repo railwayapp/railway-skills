@@ -91,11 +91,18 @@ const api = service("api", {
 
 A plan shows a tracing change as a `resource.update` with `field: "tracing"`. Turning `enabled` on or off has `deployEffect: deploy`, because the `OTEL_*` variables land with a deploy; an `autoInstrumentation`-only change is `deployEffect: none` and reaches the running containers live. A new service carries `tracing` on its create.
 
-**Current limitation: the SDKs don't carry `tracing` yet.** The TypeScript `service()` helper, and the Python and Go ones, whitelist their config keys and `tracing` is not among them, so a `tracing:` the user writes in `railway.ts` is dropped before the CLI sees it and never applies. The other direction is worse: a compiled config with no `tracing` block asks to remove it, so `railway config plan` against a service that is traced shows a `tracing` update with `after: null` and `deployEffect: deploy`, and `railway config apply` turns tracing off and redeploys. Until the SDKs ship the field:
+**Setting `tracing` in config.** `service()` passes the block through to the CLI as `tracing: { enabled?, autoInstrumentation? }`, both optional booleans: `tracing: { enabled: true }` in TypeScript (typed as `ServiceTracing`), `tracing={"enabled": True}` in Python, `"tracing": map[string]any{"enabled": true}` in Go. `fn()` takes it too; `database()` and the database helpers don't, since databases never carry tracing. `{ enabled: false }`, `null` and no block all plan the same.
 
-- Set tracing with `set-service-tracing`, `railway trace` or the dashboard, not in `railway.ts`, and say why when the user asks for it in config.
-- Read every plan for a `tracing` change nobody authored, and don't apply one. `railway config pull` reproduces the block, but the SDK drops it again on the next plan, so pulling doesn't fix it.
-- If an apply already disabled tracing, re-enable it with `set-service-tracing`; the redeploy for the variables follows.
+Two version requirements, both to check before writing the block:
+
+- **CLI 5.63.0 or newer.** An older CLI drops `tracing` on compile and never diffs it, so the setting silently doesn't apply, but nothing proposes removing it either.
+- **`railway` 3.12.0+, `railway-sdk` 0.3.0+ or the Go SDK v0.3.0+.** All three accept the block the same way. An older SDK drops it before the CLI sees it; `npm ls railway`, `pip show railway-sdk` or the `require` line in `.railway/go.mod` shows which one is installed.
+
+**The hazard is an old SDK on a new CLI.** The SDK drops the block, the compiled config has no `tracing`, and `railway config plan` against a traced service shows a `tracing` update with `after: null` and `deployEffect: deploy`; `railway config apply` then turns tracing off and redeploys. So:
+
+- If the SDK is too old, upgrade it before adding `tracing` to config, or set tracing with `set-service-tracing`, `railway trace enable` or the dashboard and say why.
+- Read every plan for a `tracing` removal nobody authored, and don't apply one. Upgrade the SDK and plan again. `railway config pull` reproduces the block, but an old SDK drops it again on the next plan, so pulling alone doesn't fix it.
+- If an apply already disabled tracing, re-enable it with `set-service-tracing` or `railway trace enable`; the redeploy for the variables follows.
 
 ## Choose how the service exports spans
 
@@ -293,7 +300,7 @@ Workflow for "why is this request slow / failing":
 - **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it off with `set-service-tracing` (`autoInstrumentationEnabled` false), or on the CLI `railway trace disable --auto-instrument` then `railway trace enable`.
 - **Spans missing from a busy service**: over 1,000 spans per replica per 10 seconds. Disable noisy instrumentations or sample in the SDK; see [Sampling](#sampling).
 - **A Function shows edge spans only**: automatic instrumentation can't help (Bun); the SDK has to be in the file. Check `get-function-source-code` for the `NodeSDK` block and the request wrapper, that the deploy logs show `bun install` succeeding, and that `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER` are `none`. See [Instrument a Function (Bun)](#instrument-a-function-bun).
-- **`railway config plan` wants to remove `tracing`**: the IaC SDKs drop the field, so every plan against a traced service proposes turning it off. Don't apply it; see [Infrastructure as code](#infrastructure-as-code).
+- **`railway config plan` wants to remove `tracing`** (`after: null`, nobody changed it): the IaC SDK is too old to carry the field and drops it (`railway` below 3.12.0, `railway-sdk` below 0.3.0, Go SDK below v0.3.0). Don't apply it; upgrade the SDK and plan again. See [Infrastructure as code](#infrastructure-as-code).
 
 ## Validated against
 
@@ -301,6 +308,7 @@ Workflow for "why is this request slow / failing":
 - Public GraphQL API (`railway api schema`): `ServiceInstance.tracingEnabled`, `ServiceInstance.autoInstrumentationEnabled` and `ServiceInstanceUpdateInput` as the per-environment path; `Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled` and their update inputs marked deprecated; the `traces`, `trace` and `tracingStatus` queries
 - Railway MCP (`https://mcp.railway.com`) tool descriptions and schemas: `get-tracing` and `set-service-tracing` with `environmentId`, `describe-service`, `list-traces`, `get-trace`, `get-tracing-coverage`, `get-function-source-code`, `update-function-source-code`
 - CLI source (railwayapp/cli, per-environment `railway trace` and the IaC `tracing` block in #1239): `src/commands/trace.rs` (subcommands, `--all`, `--environment`), `src/iac/compiler.rs` (`services[id].tracing` on service nodes), `src/iac/change_set.rs` (tracing diff, `deployEffect`, removal when the block is absent), `src/commands/config/mod.rs` (pull renderer)
+- IaC SDK sources for the `tracing` block: railway-ts-sdk `src/iac/sdk.ts` and `src/iac/schema.ts` (`ServiceTracing`; `railway` 3.12.0), railway-py-sdk `_normalize_tracing` in `src/railway_sdk/__init__.py` (`railway-sdk` 0.3.0), railway-go-sdk `serviceNode` in `railway.go` (v0.3.0); CLI 5.63.0 `src/iac/compiler.rs` and `src/iac/change_set.rs`
 - Provided variables observed on a traced service's deploy: the five `OTEL_*` variables in the table above and no sampler variables
 - Function runtime: the public `ghcr.io/railwayapp/function-bun:1.4.0` image (Bun 1.4.0, bare imports turned into a `package.json` and installed with `bun install` at every start)
 - Function examples run on Bun 1.4.0 with `@opentelemetry/sdk-node` 0.222.0 and `@hono/otel` 1.1.2 against a stub OTLP receiver: server span continues the incoming `traceparent`, client span propagates it, script flushes on `sdk.shutdown()`

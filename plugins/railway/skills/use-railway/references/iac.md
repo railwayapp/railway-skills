@@ -113,7 +113,7 @@ const media = bucket("media", { region: "iad" });
 const backend = group("Backend", [api, worker, db]);
 ```
 
-A traced service also carries `tracing: { enabled: true, autoInstrumentation: true }`, which `config pull` renders but the `service()` helper does not pass through yet; see [Infrastructure as code in tracing.md](tracing.md#infrastructure-as-code) before applying a plan that touches `tracing`.
+A traced service also carries `tracing: { enabled: true, autoInstrumentation: true }`, which `config pull` renders and `service()` passes through to the CLI. This needs CLI 5.63.0 or newer (an older CLI drops the block on compile and never diffs it) and `railway` 3.12.0+, `railway-sdk` 0.3.0+ or the Go SDK v0.3.0+. An older SDK drops the block too, and on CLI 5.63.0+ that makes every plan against a traced service propose removing `tracing`; see [Infrastructure as code in tracing.md](tracing.md#infrastructure-as-code) before applying one.
 
 Advanced placement can map regions to replica counts:
 
@@ -246,3 +246,4 @@ For a requested temporary edit to an existing legacy service, retain its format,
 
 - Docs: [Infrastructure as Code](https://docs.railway.com/infrastructure-as-code), [IaC reference](https://docs.railway.com/infrastructure-as-code/reference), [Config as Code](https://docs.railway.com/config-as-code)
 - CLI source (v5.49.1): [config/mod.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/commands/config/mod.rs), [config/migrate.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/commands/config/migrate.rs), [authoring.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/commands/config/authoring.rs), [eval.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/iac/eval.rs), [saved_plan.rs](https://github.com/railwayapp/cli/blob/v5.49.1/src/iac/saved_plan.rs)
+- IaC SDK sources for the `tracing` block: railway-ts-sdk `src/iac/sdk.ts` and `src/iac/schema.ts` (`ServiceTracing`; `railway` 3.12.0), railway-py-sdk `_normalize_tracing` (`railway-sdk` 0.3.0), railway-go-sdk `serviceNode` (v0.3.0); CLI 5.63.0 `src/iac/compiler.rs` and `src/iac/change_set.rs`
