@@ -32,6 +32,18 @@ railway setup agent
 
 ## Installing Railway integrations
 
+### skills.sh
+
+Install the `use-railway` skill into any agent supported by
+[skills.sh](https://skills.sh):
+
+```bash
+npx skills add railwayapp/railway-skills
+```
+
+The skill uses Railway's MCP server when it is connected and the Railway CLI
+otherwise.
+
 ### ChatGPT and OpenAI Codex
 
 Install the official [Railway plugin for ChatGPT and
@@ -136,6 +148,8 @@ This repo ships one installable skill:
 - [`use-railway`](plugins/railway/skills/use-railway/SKILL.md)
 
 `use-railway` is route-first. Intent routing is defined in `SKILL.md`, and execution details are split into action-oriented references.
+
+It includes database design references for Postgres, MySQL, Redis, and MongoDB covering schema and data types, indexing, query patterns, locking, safe migrations, and when to use high availability, connection pooling, and point-in-time recovery on Railway.
 
 ## License
 
