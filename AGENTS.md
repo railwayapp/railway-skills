@@ -43,6 +43,7 @@ References:
 | Trace requests across services | `references/tracing.md` | Enable tracing per service and environment with the `get-tracing` / `set-service-tracing` MCP tools, `railway trace` or the IaC `tracing` block, SDK instrumentation (preferred) vs automatic (eBPF), what to instrument, instrumenting a Function (Bun), provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools or `railway trace list` / `get`, checking coverage with `get-tracing-coverage` |
 | Use a sandbox or build remotely | `references/sandbox.md` | Sandboxes: create/fork, remote exec, remote template builds, checkpoints, port forwarding (requires Priority Boarding) |
 | Analyze databases | `references/analyze-db.md` | Database introspection and performance analysis, then DB-specific refs |
+| Design databases | `references/design-postgres.md`, `design-mysql.md`, `design-redis.md`, `design-mongo.md` | Schema, indexes, query patterns, locking, safe migrations, and when to use HA, pooling, and PITR |
 | Request from API, docs, or community | `references/request.md` | GraphQL mutations, metrics queries, Central Station, official docs |
 
 ## Architecture

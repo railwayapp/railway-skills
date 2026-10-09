@@ -1,6 +1,6 @@
 # Database operations
 
-Use native CLI commands for database recovery, high availability, and connection pooling. Use [analyze-db.md](analyze-db.md) for performance analysis and [setup.md](setup.md) to create a database or connect a local client.
+Use native CLI commands for database recovery, high availability, and connection pooling. Use [analyze-db.md](analyze-db.md) for performance analysis, [setup.md](setup.md) to create a database or connect a local client, and the design references ([Postgres](design-postgres.md), [MySQL](design-mysql.md), [Redis](design-redis.md), [MongoDB](design-mongo.md)) for schema, index, query, and migration guidance.
 
 ## Choose the engine and scope
 
