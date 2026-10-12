@@ -172,7 +172,7 @@ Do NOT show cpu_limit/memory_limit columns or utilization %. Railway auto-scales
 
 ## PostgreSQL Tuning Knowledge
 
-Use this to reason about configuration issues:
+Use this to reason about what the numbers mean. **Whether to recommend changing a setting depends on the support scope** ([analyze-db.md](analyze-db.md#support-scope)): on an official Railway Postgres the settings are the template's, a hand change takes the database out of Railway support ([docs](https://docs.railway.com/databases#database-support-scope)), and the script has already turned those findings into informational ones with no command. The tables and formulas below are for explaining a finding, and for recommending a change only on a custom-image database.
 
 ### Memory Parameters
 
@@ -222,7 +222,7 @@ Railway uses SSDs. If `random_page_cost = 4.0` (HDD default), the planner thinks
 See [analyze-db.md](analyze-db.md) for full autoscale rules. For PostgreSQL specifically:
 
 - Tune parameters relative to the **current** RAM from `metrics_history.memory.current`, not `memory_limit`.
-- If shared_buffers is undersized relative to current RAM, recommend increasing it to 25% of current RAM.
+- On a custom-image database, if shared_buffers is undersized relative to current RAM, recommend increasing it to 25% of current RAM. On an official Railway database, report it and point at the in-scope levers (indexes so the hot set fits; archiving cold data).
 - If the working set far exceeds what 25% of current RAM can hold, note this as a limitation of the current memory footprint — but do NOT tell the user to increase RAM. The platform handles that automatically.
 
 ## Thresholds for Reasoning
@@ -251,7 +251,27 @@ A 1 MB table with 25% dead rows has ~250 KB of bloat. Not worth mentioning as "c
 
 ## Applying Fixes
 
-When recommending changes, include the actual SQL and **always explain side effects** — especially for settings that add overhead or change behavior.
+When recommending changes, include the actual SQL and **always explain side effects** — especially for anything that adds overhead or changes behavior.
+
+In scope on every database (the user's own domain):
+
+```sql
+-- Vacuum specific tables
+VACUUM ANALYZE "TableName";
+
+-- Emergency XID freeze
+VACUUM FREEZE "TableName";
+
+-- Indexes
+CREATE INDEX CONCURRENTLY ix_orders_customer ON orders (customer_id);
+DROP INDEX CONCURRENTLY IF EXISTS ix_unused;
+
+-- Sessions
+SELECT pg_cancel_backend(<pid>);     -- graceful
+SELECT pg_terminate_backend(<pid>);  -- force
+```
+
+Settings, **custom-image databases only** (on an official Railway Postgres these are the template's and are never recommended; see Support scope):
 
 ```sql
 -- Memory tuning (example for 4GB RAM)
@@ -263,15 +283,7 @@ SELECT pg_reload_conf();
 -- Note: shared_buffers requires restart
 ```
 
-```sql
--- Vacuum specific tables
-VACUUM ANALYZE "TableName";
-
--- Emergency XID freeze
-VACUUM FREEZE "TableName";
-```
-
-### Side effects to document per setting
+### Side effects to document per setting (custom-image databases)
 
 | Setting | Side Effect to Explain |
 |---------|----------------------|
@@ -287,7 +299,9 @@ VACUUM FREEZE "TableName";
 1. `pg_stat_statements_installed` is `false` in the JSON output
 2. `top_queries` is empty or missing
 
-If these conditions are met, tell the user to run (do NOT execute with Bash):
+On an **official Railway Postgres** (`support_scope.managed: true`): tell the user to enable it from the Database tab in the Railway dashboard. Railway's image preloads the library, so that is a `CREATE EXTENSION` with no restart, done through Railway's own flow. Do not run `CREATE EXTENSION` over SSH and do not point at the script; it refuses on an official database.
+
+On a **custom-image** database, tell the user to run (do NOT execute with Bash):
 
 ```
 python3 scripts/enable-pg-stats.py --service <name>

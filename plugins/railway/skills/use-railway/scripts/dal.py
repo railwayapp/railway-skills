@@ -530,6 +530,236 @@ def _build_metrics_history(raw_series: Dict[str, List[Dict[str, Any]]], hours: i
     return {"windows": windows}
 
 
+# ---------------------------------------------------------------------------
+# Railway support scope
+# ---------------------------------------------------------------------------
+
+SUPPORT_SCOPE_DOCS = "https://docs.railway.com/databases#database-support-scope"
+
+# The images Railway's database templates deploy. A service running one of
+# them is an official Railway database: Railway runs the template as shipped,
+# and support covers it only while its configuration is the template's. An
+# image this allowlist does not name (pgvector, TimescaleDB, a fork, a repo
+# build) is the user's to manage. The list mirrors the dashboard's engine
+# registry; add to it, never widen it by pattern.
+OFFICIAL_IMAGE_PREFIXES = (
+    "ghcr.io/railwayapp-templates/",
+    "ghcr.io/railway/",
+)
+OFFICIAL_DOCKER_HUB_PATHS = frozenset({
+    "mysql", "library/mysql",
+    "redis", "library/redis", "railwayapp/redis", "bitnami/redis",
+    "mongo", "library/mongo",
+})
+
+
+def _image_repository(image: str) -> Tuple[Optional[str], str]:
+    """Split an image reference into (registry or None, repository path)."""
+    ref = image.strip()
+    if "@" in ref:
+        ref = ref.split("@", 1)[0]
+    # A tag is the part after the last ':' when it follows the last '/'.
+    last_slash = ref.rfind("/")
+    last_colon = ref.rfind(":")
+    if last_colon > last_slash:
+        ref = ref[:last_colon]
+    first, _, rest = ref.partition("/")
+    looks_like_registry = "." in first or ":" in first or first == "localhost"
+    if rest and looks_like_registry:
+        return first.lower(), rest
+    return None, ref
+
+
+def is_official_database_image(image: Optional[str]) -> bool:
+    """Whether `image` is one Railway's database templates deploy."""
+    if not image:
+        return False
+    registry, path = _image_repository(image)
+    if registry is None and image.strip().lower().startswith(OFFICIAL_IMAGE_PREFIXES):
+        return True
+    if registry is not None and f"{registry}/{path}".lower().startswith(OFFICIAL_IMAGE_PREFIXES):
+        return True
+    if registry in (None, "docker.io", "index.docker.io"):
+        return path.lower() in OFFICIAL_DOCKER_HUB_PATHS
+    return False
+
+
+def fetch_service_image(environment_id: Optional[str], service_id: Optional[str]) -> Optional[str]:
+    """The image a service is configured with, from the environment config."""
+    if not environment_id or not service_id:
+        return None
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    api_script = os.path.join(script_dir, "railway-api.sh")
+    if not os.path.exists(api_script):
+        return None
+    query = """query cfg($id: String!) {
+        environment(id: $id) { config(decryptVariables: false) }
+    }"""
+    try:
+        result = subprocess.run(
+            [api_script, query, json.dumps({"id": environment_id})],
+            capture_output=True, text=True, timeout=20,
+        )
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout)
+        config = data.get("data", {}).get("environment", {}).get("config") or {}
+        if isinstance(config, str):
+            config = json.loads(config)
+        service = (config.get("services") or {}).get(service_id) or {}
+        image = (service.get("source") or {}).get("image")
+        return image if isinstance(image, str) and image else None
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, AttributeError, OSError):
+        return None
+
+
+def resolve_support_scope(environment_id: Optional[str], service_id: Optional[str]) -> Dict[str, Any]:
+    """Whether the database is an official Railway database (support scope applies).
+
+    An image that cannot be read is treated as official: the safe failure is a
+    recommendation withheld, never a configuration change proposed on a
+    database Railway supports.
+    """
+    image = fetch_service_image(environment_id, service_id)
+    if image is None:
+        return {
+            "managed": True,
+            "image": None,
+            "reason": "the service image could not be read; treated as an official Railway database",
+            "docs": SUPPORT_SCOPE_DOCS,
+        }
+    managed = is_official_database_image(image)
+    return {
+        "managed": managed,
+        "image": image,
+        "reason": ("official Railway database template image" if managed
+                   else "custom image; the database is the user's to manage"),
+        "docs": SUPPORT_SCOPE_DOCS,
+    }
+
+
+# What a recommendation may tell the user to run on an official Railway
+# database: the user's own domain (schema, indexes, queries, data, sessions)
+# and reads. Anything else (settings, roles, extensions, server config,
+# restarts of the engine from inside) is the template's configuration and
+# takes the database out of Railway support, so it is dropped. Allowlist,
+# deliberately: a statement kind this list does not name is out.
+_IN_SCOPE_SQL_PREFIXES = (
+    "select", "explain", "show", "with",
+    "vacuum", "analyze", "reindex", "cluster",
+    "create index", "create unique index", "drop index", "alter index",
+    "alter table", "create table", "drop table",
+    "optimize table", "analyze table", "check table",
+    "kill ",
+)
+_IN_SCOPE_REDIS_PREFIXES = (
+    "scan", "info", "slowlog", "memory", "object", "ttl", "type", "dbsize",
+    "client list", "client kill", "config get", "del ", "unlink", "expire",
+)
+_IN_SCOPE_MONGO_PATTERNS = (
+    r"^db\.[A-Za-z0-9_]+\.(createIndex|createIndexes|dropIndex|dropIndexes|getIndexes|stats|find|aggregate|explain|reIndex|totalIndexSize)\(",
+    r"^db\.(currentOp|killOp|getProfilingStatus|serverStatus|stats|getCollectionNames)\(",
+)
+
+
+def is_in_scope_command(command: str) -> bool:
+    """Whether a single recommended command stays inside Railway support scope."""
+    import re
+    text = command.strip()
+    if not text:
+        return True
+    lowered = text.lower()
+    if lowered.startswith("--") or lowered.startswith("#") or lowered.startswith("//"):
+        return True
+    if lowered.startswith(_IN_SCOPE_SQL_PREFIXES):
+        return True
+    if lowered.startswith(_IN_SCOPE_REDIS_PREFIXES):
+        return True
+    return any(re.match(pattern, text) for pattern in _IN_SCOPE_MONGO_PATTERNS)
+
+
+def _filter_commands(commands: List[str]) -> Tuple[List[str], int]:
+    """Keep in-scope commands; a comment stays with the command it annotates."""
+    kept: List[str] = []
+    dropped = 0
+    pending_comments: List[str] = []
+    for line in commands:
+        stripped = line.strip().lower()
+        if stripped.startswith(("--", "#", "//")):
+            pending_comments.append(line)
+            continue
+        if is_in_scope_command(line):
+            kept.extend(pending_comments)
+            kept.append(line)
+        else:
+            dropped += 1
+        pending_comments = []
+    return kept, dropped
+
+
+def support_scope_note(setting: Optional[str] = None, in_scope: Optional[str] = None) -> str:
+    what = f"changing {setting}" if setting else "a configuration change"
+    note = (f"Outside Railway support scope: {what} on an official Railway database by hand "
+            f"takes it out of support ({SUPPORT_SCOPE_DOCS}). Not applied, and no command is given for it.")
+    if in_scope:
+        note += f" In scope instead: {in_scope}"
+    return note
+
+
+def describe_support_scope(scope: Dict[str, Any]) -> str:
+    """One line for a report header."""
+    image = f" (image: {scope['image']})" if scope.get("image") else ""
+    if scope.get("managed"):
+        return ("official Railway database; its configuration is the template's, so findings whose remedy "
+                f"is a configuration change are informational{image}")
+    return f"custom image; the database is yours to manage{image}"
+
+
+def apply_support_scope(recommendations: List[Dict[str, Any]], scope: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Rewrite recommendations for an official Railway database.
+
+    A recommendation tagged `scope: "config"` (its remedy is a setting, an
+    extension, a role or the service's own configuration) loses its remedy and
+    commands and becomes an informational finding that says why. Any other
+    recommendation keeps only the commands that stay in scope. On a custom
+    image nothing changes.
+    """
+    if not scope or not scope.get("managed"):
+        return recommendations
+    out: List[Dict[str, Any]] = []
+    for original in recommendations:
+        rec = dict(original)
+        commands = rec.get("commands")
+        if isinstance(commands, list):
+            kept, dropped = _filter_commands(commands)
+            if dropped:
+                rec["commands_outside_scope"] = dropped
+            if kept:
+                rec["commands"] = kept
+            else:
+                rec.pop("commands", None)
+        if rec.get("scope") == "config":
+            note = support_scope_note(rec.get("setting"), rec.get("in_scope"))
+            rec["support_scope"] = "outside"
+            rec.pop("commands", None)
+            rec.pop("restart_required", None)
+            if "observation" in rec:
+                rec["message"] = f"{rec['observation']} {note}"
+            elif "action" in rec:
+                rec["action"] = note
+            elif "message" in rec:
+                rec["message"] = f"{rec['message']} {note}"
+            if not rec.get("keep_priority"):
+                if "priority" in rec:
+                    rec["priority"] = "info"
+                if "severity" in rec:
+                    rec["severity"] = "info"
+        elif rec.get("commands_outside_scope"):
+            rec["support_scope"] = "partial"
+        out.append(rec)
+    return out
+
+
 def info(msg: str) -> None:
     """Print an [INFO] message to stdout."""
     print(f"[INFO] {msg}")

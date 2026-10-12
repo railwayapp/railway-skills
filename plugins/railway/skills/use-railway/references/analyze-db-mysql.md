@@ -211,6 +211,8 @@ Long-running queries (> 30s) warrant investigation. Cross-reference with lock wa
 
 ## MySQL Tuning Knowledge
 
+For explaining what a number means. On an official Railway MySQL these parameters are the template's: changing one by hand (`SET GLOBAL`, `SET PERSIST`, a start-command flag, `my.cnf` over SSH) takes the database out of Railway support ([docs](https://docs.railway.com/databases#database-support-scope)), and the script reports such findings as informational with no command. Recommend a change only on a custom-image database.
+
 | Parameter | Default | Target | What It Does |
 |-----------|---------|--------|--------------|
 | `innodb_buffer_pool_size` | 128MB | 70-80% RAM | InnoDB's main cache. Equivalent to PostgreSQL's shared_buffers but should be much larger (70-80% vs 25%). |
@@ -222,8 +224,8 @@ Long-running queries (> 30s) warrant investigation. Cross-reference with lock wa
 
 ## MySQL-Specific Notes
 
-- **`performance_schema=0` in start command** disables query-level metrics. This is the default on Railway. Note it when detected but do not recommend enabling it without caveats — it adds ~400MB+ memory overhead and is only practical on larger instances (2GB+ RAM).
-- **`disable-log-bin` in start command** means no binary logging — point-in-time recovery is not possible. Note if relevant.
+- **`performance_schema=0` in start command** disables query-level metrics. This is the default on Railway. Note it when detected but do not recommend enabling it without caveats — it adds ~400MB+ memory overhead and is only practical on larger instances (2GB+ RAM). On an official Railway MySQL the start command is the template's: never propose editing it.
+- **`disable-log-bin` in start command** means no binary logging — point-in-time recovery is not possible. Note if relevant. Railway's own PITR flow is the supported way to get binary logging on an official MySQL; the start command is not edited by hand.
 - **`innodb-use-native-aio=0`** is common on Railway (container filesystem limitation). Not a concern.
 - **Cumulative counters**: All SHOW GLOBAL STATUS values are cumulative since server start. Use uptime to compute rates (e.g., questions/uptime = queries per second).
 

@@ -104,7 +104,7 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.6.1" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.6.2" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
@@ -128,7 +128,7 @@ Check once per session and don't re-run it after acting; the restart prompt to t
 
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.6.1` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.6.2` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
@@ -318,10 +318,31 @@ If the request spans two areas (for example, "deploy and then check if it's heal
 7. For destructive actions (delete service, remove deployment, drop database), confirm intent and state impact before executing.
 8. After mutations, verify the result with a read-back command or MCP read.
 9. **Never report a deploy as successful without observing SUCCESS for that deployment.** `up --detach`, a non-TTY `up` without CI mode, or a timed-out stream may return after upload. Follow the deployment ID from the upload in `railway deployment list --json` with the same project/environment/service scope; do not substitute a concurrent newer deployment. If status is `FAILED` or `CRASHED`, triage per [operate.md](references/operate.md). If status is `NEEDS_APPROVAL`, `SLEEPING`, `SKIPPED`, `REMOVED`, `REMOVING`, or unknown, report that state and the next action. Exit 0 alone is insufficient; see [deploy.md](references/deploy.md) for CI streaming and polling.
+10. **Never change an official Railway database's configuration.** See [Official databases: stay inside Railway support](#official-databases-stay-inside-railway-support) before touching a database service, by any path.
 
-## User-only commands (NEVER execute directly)
+## Official databases: stay inside Railway support
 
-These commands modify database state and require the user to run them directly in their terminal. **Do NOT execute these with Bash. Instead, show the command and ask the user to run it.**
+An **official Railway database** is a service running one of Railway's database templates: PostgreSQL, PostgreSQL HA, PostgreSQL Connection Pooling, MySQL, MySQL HA, Redis, Redis HA, MongoDB, MongoDB HA. Tell it by the image (`ghcr.io/railwayapp-templates/*`, or the Docker Hub `mysql`, `redis`, `bitnami/redis`, `railwayapp/redis`, `mongo` images the standalone templates deploy; the analysis scripts report it as `support_scope`). Railway runs the template as shipped and supports it as shipped. A database leaves that scope when its configuration is changed by hand, and from then on it is the user's to manage ([database support scope](https://docs.railway.com/databases#database-support-scope)).
+
+On an official database, **never**, by any path (Bash, `railway ssh`, SQL, a script, `railway environment edit`, `railway variable set`, a proposed command for the user to paste):
+
+- change the service's image, source, start command or the template's own variables;
+- change its volume: the mount path, detaching or swapping it, or restoring a backup into it by hand;
+- add or remove HA cluster members (replicas, proxies, consensus nodes) outside the `railway postgres|mysql|redis ha` flows and the dashboard;
+- edit files inside the container (the engine's config files, the data directory);
+- change the database's own configuration through SQL: roles, settings, extensions, `ALTER SYSTEM`, `SET GLOBAL` / `SET PERSIST`, `CONFIG SET`, `setParameter`.
+
+What the skill does instead:
+
+- Railway's flows for what they cover: `railway postgres pitr|ha|pgbouncer`, `railway mysql ha`, `railway redis ha` ([databases.md](references/databases.md)), the volume resize and major-upgrade flows in the dashboard, extensions and `pg_stat_statements` from the Database tab in the dashboard.
+- The user's own domain, which is always in scope: schema, indexes, queries, `VACUUM` / `ANALYZE`, cancelling or terminating sessions, the application's connection pooling and transaction handling. Reading over SSH (`psql` queries, `SHOW`, `INFO`) is fine.
+- A finding whose only remedy is a configuration change is reported as a finding: say what the number means, say that the remedy is a configuration change outside Railway support, link the docs page, and give **no command** for it. The analysis scripts already do this (`support_scope: "outside"` on the finding); do not reconstruct the command from the engine's documentation. If the user wants to go out of scope anyway, that is their call to make and their command to write; the skill does not write it.
+
+A database on any other image (pgvector, TimescaleDB, a fork, a repo build) is the user's to manage, so the section below applies there.
+
+## User-only commands on custom-image databases (NEVER execute directly)
+
+These commands modify database state. On a **custom-image** database they require the user to run them directly in their terminal: **do NOT execute these with Bash. Show the command and ask the user to run it.** On an **official Railway database** they are never run and never shown: see the section above. The two scripts refuse on an official database on their own.
 
 | Command | Why user-only |
 |---------|---------------|

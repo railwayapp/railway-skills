@@ -17,6 +17,12 @@ Requires: railway CLI linked to the correct project/environment
 
 IMPORTANT: Install and uninstall require interactive terminal confirmation.
 They cannot be run with piped input - the user must confirm directly.
+
+On an official Railway database (the Postgres template) install and uninstall
+refuse: extensions are the template's configuration, and changing them by hand
+takes the database out of Railway support. Use the Extensions section of the
+Database tab in the Railway dashboard instead. list and info are reads and
+always work.
 """
 
 import argparse
@@ -25,7 +31,8 @@ import json
 from typing import Tuple, List, Optional, Dict, Any
 from dataclasses import dataclass
 
-from dal import run_psql_query, info, error, confirm_with_user
+import dal
+from dal import run_psql_query, info, error, confirm_with_user, _init_context, resolve_support_scope
 
 
 @dataclass
@@ -327,6 +334,9 @@ They cannot be automated or run with piped input.
 
     parser.add_argument("--service", required=True, help="Service name (requires linked project)")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--project-id", help="Project ID (bypasses railway link)")
+    parser.add_argument("--environment-id", help="Environment ID (bypasses railway link)")
+    parser.add_argument("--service-id", help="Service ID (bypasses railway link)")
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -353,6 +363,18 @@ They cannot be automated or run with piped input.
         return 1
 
     service = args.service
+
+    if args.command in ("install", "uninstall"):
+        # Refuse on an official Railway database (support scope); reads are fine.
+        _init_context(args)
+        scope = resolve_support_scope(dal._ctx.environment_id, dal._ctx.service_id)
+        if scope["managed"]:
+            image = scope.get("image") or "image not readable, treated as official"
+            print(f"Not changed: '{service}' is an official Railway database ({image}).")
+            print("Extensions are the template's configuration; changing them by hand takes the database out of")
+            print(f"Railway support ({scope['docs']}).")
+            print("Use the Extensions section of the Database tab in the Railway dashboard instead.")
+            return 2
 
     if args.command == "list":
         list_extensions(service, json_output=args.json)

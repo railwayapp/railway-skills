@@ -32,6 +32,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import dal
 from dal import (
+    apply_support_scope,
+    describe_support_scope,
+    resolve_support_scope,
     LOG_LINES_DEFAULT, ProgressTimer, RailwayContext,
     _init_context, progress, run_railway_command, run_ssh_query,
     get_railway_status, get_deployment_status,
@@ -80,6 +83,7 @@ class MySQLAnalysisResult:
     # Metadata
     collection_status: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
+    support_scope: Optional[Dict[str, Any]] = None
     recommendations: List[Dict[str, str]] = field(default_factory=list)
 
 
@@ -557,8 +561,19 @@ def generate_recommendations(result: MySQLAnalysisResult) -> List[Dict[str, str]
                            f"locks, and tuning parameters could not be evaluated.",
             })
 
-    def rec(severity: str, message: str):
-        recs.append({"severity": severity, "message": message})
+    def rec(severity: str, message: str, remedy: Optional[str] = None,
+            setting: Optional[str] = None, in_scope: Optional[str] = None):
+        """A finding. With `remedy`, the remedy is a server setting: on an
+        official Railway database apply_support_scope() keeps the observation
+        and replaces the remedy with why it is not applied."""
+        if remedy is None:
+            recs.append({"severity": severity, "message": message})
+            return
+        entry = {"severity": severity, "message": f"{message} {remedy}",
+                 "observation": message, "remedy": remedy, "scope": "config", "setting": setting}
+        if in_scope:
+            entry["in_scope"] = in_scope
+        recs.append(entry)
 
     ov = result.overview or {}
     qt = result.query_throughput or {}
@@ -573,12 +588,16 @@ def generate_recommendations(result: MySQLAnalysisResult) -> List[Dict[str, str]
     if conn_pct >= 90:
         rec("critical", f"Connection usage critical at {conn_pct}%. Approaching max_connections ({max_conn}).")
     elif conn_pct >= 70:
-        rec("warning", f"Connection usage at {conn_pct}%. Consider increasing max_connections.")
+        rec("warning", f"Connection usage at {conn_pct}% of max_connections ({max_conn}).",
+            remedy="Consider increasing max_connections.", setting="max_connections",
+            in_scope="Pool connections in the application and close idle ones.")
 
     # Buffer pool hit ratio
     hit_ratio = bp.get("hit_ratio", 100)
     if hit_ratio < 95:
-        rec("critical", f"Buffer pool hit ratio at {hit_ratio}%. Increase innodb_buffer_pool_size.")
+        rec("critical", f"Buffer pool hit ratio at {hit_ratio}%.",
+            remedy="Increase innodb_buffer_pool_size.", setting="innodb_buffer_pool_size",
+            in_scope="Add indexes so reads touch fewer pages and keep the hot data set small.")
     elif hit_ratio < 99:
         rec("warning", f"Buffer pool hit ratio at {hit_ratio}% -- room for improvement with more RAM.")
 
@@ -592,7 +611,10 @@ def generate_recommendations(result: MySQLAnalysisResult) -> List[Dict[str, str]
     created_disk = qe.get("created_tmp_disk_tables", 0)
     created_total = qe.get("created_tmp_tables", 0)
     if tmp_pct > 25:
-        rec("warning", f"{tmp_pct}% of temp tables going to disk. Increase tmp_table_size/max_heap_table_size or optimize queries.")
+        rec("warning", f"{tmp_pct}% of temp tables going to disk.",
+            remedy="Increase tmp_table_size/max_heap_table_size or optimize queries.",
+            setting="tmp_table_size/max_heap_table_size",
+            in_scope="Optimize the queries that build large temporary results (GROUP BY and ORDER BY without a matching index, large DISTINCTs).")
     elif tmp_pct > 10:
         rec("info", f"Temp tables to disk at {tmp_pct}%. Watch for queries creating large temporary results.")
 
@@ -611,7 +633,9 @@ def generate_recommendations(result: MySQLAnalysisResult) -> List[Dict[str, str]
     # Sort merge passes
     sort_passes = qe.get("sort_merge_passes", 0)
     if sort_passes > 0:
-        rec("info", f"Sort merge passes ({_format_count(sort_passes)}). Increase sort_buffer_size or optimize queries.")
+        rec("info", f"Sort merge passes ({_format_count(sort_passes)}).",
+            remedy="Increase sort_buffer_size or optimize queries.", setting="sort_buffer_size",
+            in_scope="Index the ORDER BY columns so the sort is avoided.")
 
     # Row lock waits
     row_lock_waits = lk.get("row_lock_waits", 0)
@@ -652,9 +676,11 @@ def generate_recommendations(result: MySQLAnalysisResult) -> List[Dict[str, str]
     opens_per_sec = tc.get("opens_per_second", 0)
     cache_util = tc.get("cache_utilization_percent", 0)
     if cache_util >= 95:
-        rec("warning", f"Table cache {cache_util}% full ({tc.get('open_tables')}/{tc.get('table_open_cache')}). Increase table_open_cache.")
+        rec("warning", f"Table cache {cache_util}% full ({tc.get('open_tables')}/{tc.get('table_open_cache')}).",
+            remedy="Increase table_open_cache.", setting="table_open_cache")
     if opens_per_sec > 5:
-        rec("warning", f"Table opens at {opens_per_sec}/sec — cache may be undersized. Increase table_open_cache.")
+        rec("warning", f"Table opens at {opens_per_sec}/sec — cache may be undersized.",
+            remedy="Increase table_open_cache.", setting="table_open_cache")
 
     # Top queries diagnostic
     if not result.top_queries:
@@ -918,6 +944,8 @@ def format_report(result: MySQLAnalysisResult) -> str:
 
     # --- Recommendations ---
     heading("Recommendations")
+    if result.support_scope:
+        lines.append(f"Support scope: {describe_support_scope(result.support_scope)}")
     if result.recommendations:
         for r in result.recommendations:
             severity = r["severity"].upper()
@@ -1073,9 +1101,10 @@ def analyze_mysql(service: str, timeout: int = 60, quiet: bool = False,
             "error": "Logs API returned no data",
         }
 
-    # === RECOMMENDATIONS ===
+    # === RECOMMENDATIONS === (inside Railway support scope on an official database)
     progress(5, 5, "Generating recommendations...", quiet)
-    result.recommendations = generate_recommendations(result)
+    result.support_scope = resolve_support_scope(environment_id, service_id)
+    result.recommendations = apply_support_scope(generate_recommendations(result), result.support_scope)
 
     if not quiet:
         total = dal._progress_timer.total_elapsed()
