@@ -32,6 +32,8 @@ railway variable set KEY=value --service <service> --environment <env>
 railway variable delete KEY --service <service> --environment <env>
 ```
 
+Not on an official Railway database service: its template variables (`POSTGRES_*`, `MYSQL_*`, `REDIS_*`, `MONGO_*`, the archive and cluster variables) are the template's, and editing them by hand takes the database out of Railway support ([docs](https://docs.railway.com/databases#database-support-scope)). Use the flows in [databases.md](databases.md).
+
 Variable changes trigger a redeployment by default. This is usually the desired behavior, since the service picks up the values on restart. Use `--skip-deploys` only when you plan to redeploy or restart separately.
 
 CLI 5.34.2+ accepts an empty assignment such as `railway variable set OPTIONAL_VALUE= --service <service>`. Empty is a value, not a deletion. Before an idempotent delete, list keys and delete only if present.
@@ -148,6 +150,8 @@ Sealed variables are write-only. CLI 5.47.2+ lists their names with `null` in JS
 ## Service config
 
 Service configuration controls source, build, deploy, and networking settings. There are two ways to mutate it.
+
+Not on an official Railway database service: its image, source, start command and volume mount are the template's, and a hand edit takes the database out of Railway support ([docs](https://docs.railway.com/databases#database-support-scope)). Networking (public access, TCP proxy, private networking) and the region are fine.
 
 ### Dot-path patch
 

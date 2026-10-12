@@ -145,6 +145,8 @@ For latency or errors that span several services, or a request a user reported w
 
 Use SSH when logs and metrics don't expose enough state and the user needs shell-level inspection inside a running service.
 
+Inside an official Railway database, SSH is for reading (`psql` queries, `SHOW`, `INFO`, log files). Editing the engine's config files, the data directory, roles, settings or extensions from the shell takes the database out of Railway support ([docs](https://docs.railway.com/databases#database-support-scope)).
+
 ```bash
 railway ssh --service <service> --environment <env>
 railway ssh --service <service> --environment <env> -- "printenv | sort"
@@ -258,7 +260,7 @@ Under Attack Mode can block API clients and webhooks. If the service is API-only
 
 ## Recovery
 
-After identifying the cause, fix and verify:
+After identifying the cause, fix and verify. These fixes are for application services: on an official Railway database service the start command, image and template variables are the template's (see [databases.md](databases.md)).
 
 ```bash
 # Fix (examples)

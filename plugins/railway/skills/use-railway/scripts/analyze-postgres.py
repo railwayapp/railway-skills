@@ -32,6 +32,9 @@ from dataclasses import dataclass, field, asdict
 
 import dal
 from dal import (
+    apply_support_scope,
+    describe_support_scope,
+    resolve_support_scope,
     LOG_LINES_DEFAULT, ProgressTimer, RailwayContext,
     _init_context, progress, run_railway_command, run_ssh_query, run_psql_query,
     get_railway_status, get_deployment_status,
@@ -85,6 +88,8 @@ class AnalysisResult:
     metrics_history: Optional[Dict[str, Any]] = None  # Multi-window time series + trend analysis for CPU, memory, disk, network
     collection_status: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # Status of each data source
     errors: List[str] = field(default_factory=list)
+    # Whether this is an official Railway database (support scope applies) and why.
+    support_scope: Optional[Dict[str, Any]] = None
     recommendations: List[Dict[str, str]] = field(default_factory=list)
 
 
@@ -1398,9 +1403,10 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
             "error": "Logs API returned no data"
         }
 
-    # Generate recommendations
+    # Generate recommendations, inside Railway support scope on an official database
     progress(5, 5, "Generating recommendations...", quiet)
-    result.recommendations = generate_recommendations(result)
+    result.support_scope = resolve_support_scope(environment_id, service_id)
+    result.recommendations = apply_support_scope(generate_recommendations(result), result.support_scope)
 
     if not quiet:
         total = dal._progress_timer.total_elapsed()
@@ -1410,8 +1416,14 @@ def analyze_postgres(service: str, timeout: int = 300, quiet: bool = False,
 
 
 def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
-    """Generate recommendations based on analysis results."""
+    """Generate recommendations based on analysis results.
+
+    A recommendation whose remedy is a setting carries `scope: "config"`;
+    apply_support_scope() turns it into an informational finding on an
+    official Railway database, where settings are the template's.
+    """
     recommendations = []
+    managed = bool((result.support_scope or {}).get("managed", True))
 
     # Collection failures — surface critical issues when SSH/introspection failed
     if result.collection_status:
@@ -1460,6 +1472,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                     "priority": "immediate",
                     "issue": f"shared_buffers is only {sb_mb}MB (likely default)",
                     "action": f"Increase shared_buffers to {rec_sb} (25% of RAM)",
+                    "scope": "config", "setting": "shared_buffers",
+                    "in_scope": "Keep the hot data set small enough to cache: add indexes so queries read fewer pages, and archive or partition cold data.",
                     "explanation": "shared_buffers is PostgreSQL's main data cache - pages read from disk are stored here. "
                                    f"At {sb_mb}MB, your entire working set cannot fit in memory, forcing repeated disk reads. "
                                    "The rule of thumb is 25% of total RAM, up to 40% for read-heavy workloads.",
@@ -1478,6 +1492,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                     "priority": "short-term",
                     "issue": f"shared_buffers is {sb_mb}MB - may be undersized",
                     "action": f"Consider increasing shared_buffers to {rec_sb} (25% of RAM)",
+                    "scope": "config", "setting": "shared_buffers",
+                    "in_scope": "Keep the hot data set small enough to cache: add indexes so queries read fewer pages, and archive or partition cold data.",
                     "explanation": "shared_buffers holds cached data pages. A larger buffer pool means more data stays in memory, "
                                    "reducing disk I/O. Current size may be limiting cache hit ratio.",
                     "commands": [
@@ -1501,6 +1517,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                     "priority": "short-term",
                     "issue": f"effective_cache_size is {ec_mb}MB - may cause poor query plans",
                     "action": f"Set effective_cache_size to {rec_ec} (75% of RAM)",
+                    "scope": "config", "setting": "effective_cache_size",
                     "explanation": "effective_cache_size is a hint to the query planner about how much memory is available for caching "
                                    "(shared_buffers + OS cache). It does NOT allocate memory - it just helps PostgreSQL estimate "
                                    "whether data is likely to be cached. A low value makes the planner pessimistic, avoiding efficient "
@@ -1535,6 +1552,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                         "priority": "immediate",
                         "issue": f"work_mem is only {wm_mb}MB with {temp_files:,} temp files ({temp_gb} GB) spilled to disk",
                         "action": f"Increase work_mem to {rec_wm}",
+                        "scope": "config", "setting": "work_mem",
+                        "in_scope": "Rewrite the spilling queries: an index that matches the ORDER BY or join key avoids the sort, and smaller result sets need less memory. The statements with temp_blks_written in pg_stat_statements show which ones.",
                         "explanation": f"work_mem controls how much memory each sort, hash, or join operation can use BEFORE "
                                        f"spilling to disk (temp files). At {wm_mb}MB, your queries are constantly spilling. "
                                        f"The {temp_files:,} temp files mean disk I/O instead of fast memory operations. "
@@ -1551,6 +1570,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                         "priority": "long-term",
                         "issue": f"work_mem is at default ({wm_mb}MB)",
                         "action": f"Consider increasing work_mem to {rec_wm} for complex queries",
+                        "scope": "config", "setting": "work_mem",
+                        "in_scope": "Rewrite the spilling queries: an index that matches the ORDER BY or join key avoids the sort, and smaller result sets need less memory. The statements with temp_blks_written in pg_stat_statements show which ones.",
                         "explanation": "work_mem is memory per sort/hash operation. The default 4MB is conservative. "
                                        "Increasing it can speed up complex queries but uses more memory per operation.",
                         "commands": [
@@ -1572,6 +1593,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                     "priority": "short-term",
                     "issue": f"maintenance_work_mem is {mm_mb}MB - VACUUM and CREATE INDEX will be slow",
                     "action": f"Increase maintenance_work_mem to {rec_mm}",
+                    "scope": "config", "setting": "maintenance_work_mem",
                     "explanation": "maintenance_work_mem is used by VACUUM, CREATE INDEX, and ALTER TABLE operations. "
                                    f"At {mm_mb}MB, these maintenance operations process data in small batches, making them slow. "
                                    "Unlike work_mem, only one maintenance operation runs per session, so this can safely be higher.",
@@ -1591,6 +1613,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                     "priority": "short-term",
                     "issue": f"random_page_cost is {rpc_val} (HDD default) - Railway uses SSDs",
                     "action": "Set random_page_cost to 1.5 for SSD storage",
+                    "scope": "config", "setting": "random_page_cost",
                     "explanation": "random_page_cost tells the query planner how expensive random disk access is compared to "
                                    "sequential access. The default 4.0 assumes slow HDDs where random reads are 4x more expensive. "
                                    "Railway uses fast SSDs where random reads are almost as fast as sequential. At 4.0, "
@@ -1611,6 +1634,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                     "priority": "long-term",
                     "issue": f"checkpoint_completion_target is {cct_val} - I/O may be spiky",
                     "action": "Set checkpoint_completion_target to 0.9",
+                    "scope": "config", "setting": "checkpoint_completion_target",
                     "explanation": f"PostgreSQL periodically writes dirty buffers to disk (checkpoints). At {cct_val}, "
                                    f"it tries to complete this in {int(cct_val*100)}% of the checkpoint interval, causing I/O spikes. "
                                    "At 0.9, writes spread over 90% of the interval, smoothing disk I/O. "
@@ -1631,6 +1655,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "short-term",
                 "issue": "max_parallel_workers is 0 - parallel queries disabled",
                 "action": "Set max_parallel_workers to number of CPU cores",
+                "scope": "config", "setting": "max_parallel_workers",
                 "explanation": "PostgreSQL can use multiple CPU cores for large sequential scans, aggregates, and joins. "
                                "With max_parallel_workers=0, all queries run single-threaded regardless of table size. "
                                "WHY: Large analytical queries (COUNT, SUM, scans of big tables) could run 2-8x faster with parallelism. "
@@ -1649,6 +1674,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "long-term",
                 "issue": "max_parallel_workers_per_gather is 0 - parallel queries won't use workers",
                 "action": "Set max_parallel_workers_per_gather to 2-4",
+                "scope": "config", "setting": "max_parallel_workers_per_gather",
                 "explanation": "Even though max_parallel_workers allows parallel execution, max_parallel_workers_per_gather=0 "
                                "means each query can use 0 parallel workers (i.e., none). "
                                "WHY: This effectively disables parallelism for all queries. "
@@ -1669,6 +1695,9 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "immediate",
                 "issue": "autovacuum is DISABLED - database will bloat and eventually fail",
                 "action": "Enable autovacuum immediately",
+                "scope": "config", "setting": "autovacuum",
+                "in_scope": "Run VACUUM ANALYZE on the bloated tables by hand meanwhile. Autovacuum is on in Railway's template; off means this database's configuration was already changed by hand.",
+                "keep_priority": True,
                 "explanation": "Autovacuum is PostgreSQL's background process that reclaims space from deleted/updated rows "
                                "and prevents transaction ID wraparound. With autovacuum OFF: "
                                "1) Tables bloat indefinitely - deleted rows waste space and slow queries. "
@@ -1704,13 +1733,17 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
         recommendations.append({
             "priority": "short-term",
             "issue": "pg_stat_statements extension not available - cannot analyze query performance",
-            "action": "Enable pg_stat_statements extension",
+            "action": ("Enable pg_stat_statements from the Database tab in the Railway dashboard "
+                       "(Railway's Postgres image preloads it, so this is a CREATE EXTENSION with no restart)"
+                       if managed else "Enable pg_stat_statements extension"),
             "explanation": "pg_stat_statements tracks execution statistics for all SQL queries: call count, total time, "
                            "rows returned, cache hits, temp file usage. Without it, you cannot identify slow queries or optimization targets. "
                            "WHY: This analysis found memory/vacuum issues but cannot pinpoint which QUERIES cause problems. "
                            "SIDE EFFECT: Minor overhead (~1-5%) for tracking. Stores stats in shared memory. "
                            "IF NOT ENABLED: You're flying blind - you can see symptoms (high I/O, temp files) but not the queries causing them. "
-                           "To enable, run: python3 scripts/enable-pg-stats.py --service <name> (may require brief restart).",
+                           + ("To enable: the Database tab in the Railway dashboard; a CREATE EXTENSION over SSH would take the database out of Railway support."
+                              if managed else
+                              "To enable, run: python3 scripts/enable-pg-stats.py --service <name> (may require brief restart)."),
         })
 
     # Cache hit ratio
@@ -1728,6 +1761,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": priority,
                 "issue": f"Table cache hit ratio is {table_hit}% (should be >95%)",
                 "action": "Increase shared_buffers - data is being read from disk instead of memory cache",
+                "scope": "config", "setting": "shared_buffers",
+                "in_scope": "Keep the hot data set small enough to cache: add indexes so queries read fewer pages, and archive or partition cold data.",
                 "explanation": f"Cache hit ratio measures how often PostgreSQL finds requested data in memory (shared_buffers) "
                                f"vs reading from disk. At {table_hit}%, roughly {100-table_hit}% of data requests hit disk.{context}",
             })
@@ -1746,6 +1781,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "immediate",
                 "issue": f"Table '{table['table']}' has {hit_pct}% cache hit with {disk_reads:,} disk reads",
                 "action": "Increase shared_buffers to fit this table in memory",
+                "scope": "config", "setting": "shared_buffers",
+                "in_scope": "Keep the hot data set small enough to cache: add indexes so queries read fewer pages, and archive or partition cold data.",
                 "explanation": f"The '{table['table']}' table ({table_size}) is almost never found in cache. "
                                f"With {disk_reads:,} disk reads, every query touching this table causes disk I/O. "
                                f"This is likely because the table is larger than shared_buffers.",
@@ -1755,6 +1792,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "short-term",
                 "issue": f"Table '{table['table']}' has {hit_pct}% cache hit with {disk_reads:,} disk reads",
                 "action": "Consider increasing shared_buffers for better caching",
+                "scope": "config", "setting": "shared_buffers",
+                "in_scope": "Keep the hot data set small enough to cache: add indexes so queries read fewer pages, and archive or partition cold data.",
                 "explanation": f"The '{table['table']}' table has a low cache hit rate, causing frequent disk reads. "
                                f"Increasing shared_buffers would allow more of this table to stay in memory.",
             })
@@ -1775,6 +1814,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "immediate",
                 "issue": f"shared_buffers ({shared_buffers_mb}MB) is much smaller than working set (~{round(total_table_mb)}MB)",
                 "action": f"Increase shared_buffers to at least {round(total_table_mb / 4)}MB",
+                "scope": "config", "setting": "shared_buffers",
+                "in_scope": "Keep the hot data set small enough to cache: add indexes so queries read fewer pages, and archive or partition cold data.",
                 "explanation": f"Your database has ~{round(total_table_mb)}MB of table data but only {shared_buffers_mb}MB of buffer cache.{context} "
                                f"PostgreSQL cannot keep frequently-accessed data in memory, causing constant disk I/O.",
             })
@@ -1892,7 +1933,9 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 recommendations.append({
                     "priority": "short-term",
                     "issue": f"High temp file usage: ~{files_per_day:,} files/day ({round(gb_per_day, 1)} GB/day)",
-                    "action": "Increase work_mem from {wm_mb}MB to 32-64MB",
+                    "action": f"Increase work_mem from {wm_mb}MB to 32-64MB",
+                    "scope": "config", "setting": "work_mem",
+                    "in_scope": "Rewrite the spilling queries: an index that matches the ORDER BY or join key avoids the sort, and smaller result sets need less memory. The statements with temp_blks_written in pg_stat_statements show which ones.",
                     "explanation": f"When a query needs to sort or hash more data than work_mem allows ({wm_mb}MB), "
                                    f"PostgreSQL spills to temp files on disk. Your queries are creating ~{files_per_day:,} temp files daily, "
                                    f"writing {round(gb_per_day, 1)}GB to disk. This is slower than in-memory operations.",
@@ -1908,6 +1951,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "short-term",
                 "issue": f"High temp file usage: {temp_files:,} files, {temp_gb} GB written since stats reset",
                 "action": f"Increase work_mem from {wm_mb}MB to 32-64MB",
+                "scope": "config", "setting": "work_mem",
+                "in_scope": "Rewrite the spilling queries: an index that matches the ORDER BY or join key avoids the sort, and smaller result sets need less memory. The statements with temp_blks_written in pg_stat_statements show which ones.",
                 "explanation": f"Queries are spilling to disk because work_mem ({wm_mb}MB) is too small for sort/hash operations. "
                                f"Each temp file represents a query that couldn't fit its working data in memory.",
                 "commands": [
@@ -1927,7 +1972,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
             recommendations.append({
                 "priority": "immediate",
                 "issue": f"Connection usage is {pct}% ({current}/{max_conn}, only {available} available)",
-                "action": "Use connection pooling (PgBouncer) or increase max_connections",
+                "action": "Put PgBouncer in front of the database (railway postgres pgbouncer enable, a Railway flow) and pool connections in the application",
                 "explanation": f"You're using {current} of {max_conn} connections. Each PostgreSQL connection uses memory "
                                f"(~10MB each). Rather than increasing max_connections, use connection pooling (PgBouncer) "
                                f"to multiplex many app connections over fewer database connections.",
@@ -2069,11 +2114,15 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                                        f"3) Holds a transaction ID slot, contributing to XID bloat. "
                                        f"COMMON CAUSES: Application bug, network timeout without cleanup, abandoned connection. "
                                        f"TO FIX: SELECT pg_terminate_backend({txn.get('pid')}); (terminates connection). "
-                                       f"PREVENTION: Set idle_in_transaction_session_timeout to auto-kill stuck transactions.",
+                                       + ("PREVENTION: fix the application's transaction handling (missing COMMIT/ROLLBACK, work done inside an open transaction). "
+                                          "The idle_in_transaction_session_timeout setting is the template's on an official Railway database."
+                                          if managed else
+                                          "PREVENTION: Set idle_in_transaction_session_timeout to auto-kill stuck transactions."),
                         "commands": [
                             f"SELECT pg_terminate_backend({txn.get('pid')});  -- Kill this connection",
+                        ] + ([] if managed else [
                             "ALTER SYSTEM SET idle_in_transaction_session_timeout = '5min';  -- Auto-kill in future",
-                        ],
+                        ]),
                     })
                 elif idle_sec > 60:
                     recommendations.append({
@@ -2083,7 +2132,9 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                         "explanation": f"This transaction has been idle for {idle_sec}s. While not critical yet, "
                                        f"transactions should be short-lived. Long idle transactions hold locks and block VACUUM. "
                                        f"COMMON CAUSES: Missing COMMIT/ROLLBACK, waiting for user input inside transaction, connection pool issues. "
-                                       f"PREVENTION: Use idle_in_transaction_session_timeout to auto-terminate stuck transactions.",
+                                       + ("PREVENTION: keep transactions short in the application; the idle_in_transaction_session_timeout setting is the template's on an official Railway database."
+                                          if managed else
+                                          "PREVENTION: Use idle_in_transaction_session_timeout to auto-terminate stuck transactions."),
                     })
             except (ValueError, TypeError):
                 pass
@@ -2212,7 +2263,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
         recommendations.append({
             "priority": "immediate",
             "issue": f"WAL archiver has {result.archiver['failed_count']} failed archival(s)",
-            "action": "Check archive_command configuration and destination storage",
+            "action": ("Check point-in-time recovery with railway postgres pitr status; archiving is part of Railway's PITR flow, so report this rather than changing archive_command"
+                       if managed else "Check archive_command configuration and destination storage"),
             "explanation": f"WAL (Write-Ahead Log) archiving is failing. Last failed WAL: {last_failed_wal} at {last_failed_time}. "
                            f"This affects point-in-time recovery capability. Common causes: "
                            f"1) Archive destination full or unreachable, 2) Permissions issues, 3) archive_command misconfiguration.",
@@ -2227,6 +2279,8 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "short-term",
                 "issue": f"Backend processes forced {bg['buffers_backend_fsync']:,} fsync operations",
                 "action": "Increase shared_buffers to reduce dirty buffer pressure",
+                "scope": "config", "setting": "shared_buffers",
+                "in_scope": "Keep the hot data set small enough to cache: add indexes so queries read fewer pages, and archive or partition cold data.",
                 "explanation": "Normally, the background writer or checkpointer flushes dirty buffers to disk. "
                                f"When shared_buffers is too small, backends must flush dirty buffers themselves "
                                f"(buffers_backend_fsync > 0). This forces query processes to do I/O, causing latency spikes.",
@@ -2242,6 +2296,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "short-term",
                 "issue": f"{req_pct}% of checkpoints are requested (not timed) - WAL is filling up",
                 "action": "Increase max_wal_size to 2-4GB",
+                "scope": "config", "setting": "max_wal_size",
                 "explanation": f"Checkpoints should happen on a timer (checkpoint_timeout), not because WAL fills up. "
                                f"With {req_pct}% requested checkpoints, WAL segments are filling faster than expected. "
                                f"This causes I/O spikes. Increasing max_wal_size gives more headroom before forced checkpoints.",
@@ -2258,6 +2313,7 @@ def generate_recommendations(result: AnalysisResult) -> List[Dict[str, str]]:
                 "priority": "long-term",
                 "issue": f"Background writer hit max write limit {bg['maxwritten_clean']:,} times",
                 "action": "Increase bgwriter_lru_maxpages to let bgwriter flush more buffers per round",
+                "scope": "config", "setting": "bgwriter_lru_maxpages",
                 "explanation": "The background writer proactively flushes dirty buffers before they're needed. "
                                f"It hit the per-round limit {bg['maxwritten_clean']:,} times, meaning it couldn't "
                                f"keep up with the write rate. Increasing bgwriter_lru_maxpages allows more buffer "
@@ -2304,6 +2360,8 @@ def format_report(result: AnalysisResult) -> str:
     lines.append(f"Type: {result.db_type}")
     lines.append(f"Generated: {result.timestamp}")
     lines.append(f"Status: {result.deployment_status}")
+    if result.support_scope:
+        lines.append(f"Support scope: {describe_support_scope(result.support_scope)}")
     lines.append("")
 
     # Collection status table
@@ -2932,6 +2990,8 @@ def format_report(result: AnalysisResult) -> str:
             # Note if restart is required
             if rec.get("restart_required"):
                 lines.append("   ⚠️ *Requires database restart*")
+            if rec.get("commands_outside_scope"):
+                lines.append("   *(a configuration command was left out: outside Railway support scope)*")
 
             lines.append("")
 
