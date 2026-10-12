@@ -92,7 +92,7 @@ Common options across all scripts:
 
 ## Before You Analyze: Check Collection Status
 
-**ALWAYS check `collection_status` and `errors[]` FIRST before interpreting any data.** The script collects data from multiple independent sources. Any of them can fail.
+**Check `collection_status` and `errors[]` before interpreting any data.** The script collects data from multiple independent sources. Any of them can fail.
 
 ### Decision Table
 
@@ -146,9 +146,9 @@ Then ask if they'd like to proceed with a partial analysis (metrics + logs only)
 
 ### When database_query failed — other SSH errors
 
-This means SSH could not reach the database or the query failed. You have NO connection stats, NO cache hit ratios, NO vacuum health, NO query performance data. All those fields will be null/empty.
+This means SSH could not reach the database or the query failed. You have no connection stats, cache hit ratios, vacuum health or query performance data. All those fields will be null/empty.
 
-**You MUST:**
+**In the report:**
 1. State clearly: "Database introspection failed — SSH could not connect to the service"
 2. Show the `collection_status` errors
 3. Show only the data that DID succeed (metrics, logs)
