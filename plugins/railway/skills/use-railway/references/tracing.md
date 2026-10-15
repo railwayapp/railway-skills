@@ -1,6 +1,6 @@
 # Tracing
 
-Trace a request from Railway's edge through a service and into the services it calls. Tracing is switched on per service **and per environment**: with the `set-service-tracing` MCP tool, `railway trace enable`, or the **Tracing setup** drawer on the project's **Traces** tab. Read the result with `list-traces` and `get-trace`, or on the same tab.
+Trace a request from Railway's edge through a service and into the services it calls. Tracing is switched on per service **and per environment**: with the `update-service` MCP tool (its `tracing` field), `railway trace enable`, or the **Tracing setup** drawer on the project's **Traces** tab. Read the result with `list-traces` and `get-trace`, or on the same tab.
 
 Tracing is a preview feature. If the project has no **Traces** tab, the account needs **Tracing** enabled in Priority Boarding first.
 
@@ -13,32 +13,32 @@ Spans from inside the service only appear once the service exports them, through
 
 ## Enable tracing
 
-Tracing is two switches on each service instance, so they are set per service and per environment. `tracingEnabled` makes the edge trace requests to the service and gives its next deploy the OpenTelemetry variables below; `autoInstrumentationEnabled` attaches eBPF probes to the service's processes and only does anything while tracing is on. There is no project-wide default and no sample rate: every client-facing request to a traced service is traced. Enabling a service in `production` says nothing about `staging`, so check and set each environment the user cares about.
+Tracing is two switches on each service instance, so they are set per service and per environment. `tracingEnabled` makes the edge trace requests to the service and gives its deploys the OpenTelemetry variables below; `autoInstrumentationEnabled` attaches eBPF probes to the service's processes and only does anything while tracing is on. There is no project-wide default and no sample rate: every client-facing request to a traced service is traced. Enabling a service in `production` says nothing about `staging`, so check and set each environment the user cares about.
 
 **Dashboard:** open the **Traces** tab → **Tracing setup**. The drawer lists the services of the environment the dashboard is on (the subtitle names it); each row's **Traced** switch and **Automatic instrumentation** / **Manual instrumentation** choice apply to that environment only. Switch environment to configure another. The service's **Settings → Tracing** section links to the same drawer.
 
-**Agent path:** two MCP tools read and change these settings, and `railway trace` does the same from the CLI. Resolve IDs from the URL or `railway status --json` first, and read before writing. Both tools use the `production` environment when `environmentId` is omitted, so pass it whenever the user is looking at another environment. On a Railway cloud agent in a dashboard chat session the `railway` CLI is unauthenticated, so resolve IDs with `list-services` and stay on the MCP tools throughout.
+**Agent path:** `get-tracing` reads these settings and `update-service` changes them through its `tracing` field, alongside the rest of a service's config; `railway trace` does the same from the CLI. Resolve IDs from the URL or `railway status --json` first, and read before writing. Always pass `environmentId`: `get-tracing` falls back to the `production` environment without it, and `update-service` then changes every environment of the service. On a Railway cloud agent in a dashboard chat session the `railway` CLI is unauthenticated, so resolve IDs with `list-services` and stay on the MCP tools throughout.
 
 | Tool | Access | Purpose |
 |---|---|---|
 | `get-tracing` | viewer | The `environment` and, per service in it, `tracingEnabled`, `autoInstrumentationEnabled` and whether it is `autoInstrumentationActive` (both on). Pass `serviceId` for one service, omit it for every service in the environment |
-| `set-service-tracing` | member | `tracingEnabled` and `autoInstrumentationEnabled` for one service in one environment. Each is optional and independent; omit what should stay as it is. Returns the service's state in that environment |
+| `update-service` | member | `tracing: { enabled, autoInstrumentation }` for one service in one environment, next to its other config fields. The two switches are optional and independent; omit what should stay as it is. Changing `enabled` redeploys the service so the variables below land at once; `autoInstrumentation` applies without a redeploy. Pass `staged: true` to put the change in the environment's pending changes instead. Returns the service's state in each environment it touched |
 
-Both take `projectId` and an optional `environmentId`. `describe-service` reports the same tracing state for one service in the environment it was asked about.
+Both take `projectId` and `environmentId`. `describe-service` reports the same tracing state for one service in the environment it was asked about.
 
 ```text
 Get tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb in environment <environment-id>
 ```
 
 ```text
-Set service tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, service <service-id>, environment <environment-id>: tracingEnabled true
+Update service <service-id> in project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, environment <environment-id>: tracing enabled true
 ```
 
 ```text
-Set service tracing for project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, service <service-id>, environment <environment-id>: autoInstrumentationEnabled true
+Update service <service-id> in project 6adb5ae3-0e3a-4ead-b42c-1fd36f217ffb, environment <environment-id>: tracing autoInstrumentation true
 ```
 
-`set-service-tracing` warns when it switches auto-instrumentation on for a service whose tracing is off: the switch does nothing until tracing is enabled too. Without Railway MCP or `railway trace`, the public `serviceInstanceUpdate` mutation sets the same fields through `railway api`, and the environment's service instances carry them for reading; see [request.md](request.md). That fallback needs an authenticated CLI, which a cloud agent's chat session does not have.
+`update-service` warns when it switches auto-instrumentation on for a service whose tracing is off: the switch does nothing until tracing is enabled too. Without Railway MCP or `railway trace`, the public `serviceInstanceUpdate` mutation sets the same fields through `railway api`, and the environment's service instances carry them for reading; see [request.md](request.md). That fallback needs an authenticated CLI, which a cloud agent's chat session does not have.
 
 ```bash
 railway api \
@@ -70,13 +70,13 @@ railway trace enable --all --environment staging        # every service in stagi
 railway trace disable --auto-instrument                 # tracing and OBI off
 ```
 
-`--all` and `--service` are mutually exclusive. Pass `--project <id> --environment <name>` together when nothing is linked. `--json` prints one document with `environment: { id, name }` and the service state. Changing tracing needs a user or workspace token; a project token (`RAILWAY_TOKEN`) can only read. The CLI has no switch for auto-instrumentation alone: `railway trace disable --auto-instrument` followed by `railway trace enable` leaves tracing on and OBI off, or use `set-service-tracing` with only `autoInstrumentationEnabled`.
+`--all` and `--service` are mutually exclusive. Pass `--project <id> --environment <name>` together when nothing is linked. `--json` prints one document with `environment: { id, name }` and the service state. Changing tracing needs a user or workspace token; a project token (`RAILWAY_TOKEN`) can only read. The CLI has no switch for auto-instrumentation alone: `railway trace disable --auto-instrument` followed by `railway trace enable` leaves tracing on and OBI off, or use `update-service` with only `tracing.autoInstrumentation`.
 
 What happens next:
 
 - The edge starts tracing requests to the service's domains in that environment within seconds.
 - Automatic instrumentation reaches the running containers within about a minute. No redeploy.
-- The OpenTelemetry variables below are added on the **next deploy** in that environment. An app with an SDK exports nothing until it is redeployed: `railway redeploy --service <service> --yes`.
+- The OpenTelemetry variables below are added to the service's deploys in that environment. `update-service` and the IaC `tracing` block redeploy the service when `enabled` changes, so they land at once; `railway trace enable` and the dashboard switch do not, so after those an app with an SDK exports nothing until it is redeployed: `railway redeploy --service <service> --yes`.
 
 ### Infrastructure as code
 
@@ -100,9 +100,9 @@ Two version requirements, both to check before writing the block:
 
 **The hazard is an old SDK on a new CLI.** The SDK drops the block, the compiled config has no `tracing`, and `railway config plan` against a traced service shows a `tracing` update with `after: null` and `deployEffect: deploy`; `railway config apply` then turns tracing off and redeploys. So:
 
-- If the SDK is too old, upgrade it before adding `tracing` to config, or set tracing with `set-service-tracing`, `railway trace enable` or the dashboard and say why.
+- If the SDK is too old, upgrade it before adding `tracing` to config, or set tracing with `update-service`, `railway trace enable` or the dashboard and say why.
 - Read every plan for a `tracing` removal nobody authored, and don't apply one. Upgrade the SDK and plan again. `railway config pull` reproduces the block, but an old SDK drops it again on the next plan, so pulling alone doesn't fix it.
-- If an apply already disabled tracing, re-enable it with `set-service-tracing` or `railway trace enable`; the redeploy for the variables follows.
+- If an apply already disabled tracing, re-enable it with `update-service` (which redeploys so the variables follow) or `railway trace enable` and a redeploy.
 
 ## Choose how the service exports spans
 
@@ -177,7 +177,7 @@ What differs from a repo service:
 
 Recipe:
 
-1. Turn tracing on for the function in the environment it runs in with `set-service-tracing` (or `railway trace enable --service <function>`) if `get-tracing` shows it off there. Leave `autoInstrumentationEnabled` off; it does nothing for Bun.
+1. Turn tracing on for the function in the environment it runs in with `update-service` (`tracing: { enabled: true }`, or `railway trace enable --service <function>`) if `get-tracing` shows it off there. Leave `autoInstrumentation` off; it does nothing for Bun.
 2. Set the exporter variables with `set-variables`. `NodeSDK` exports metrics and logs over OTLP by default and the receiver rejects both. Pass `skipDeploys: true`; the code push in step 5 is the deploy that picks them up. Check `list-variables` first: a function that sets its own `OTEL_EXPORTER_OTLP_ENDPOINT` gets none of Railway's tracing variables.
 
    ```text
@@ -292,12 +292,12 @@ Workflow for "why is this request slow / failing":
 ## Troubleshoot
 
 - **No traces at all**: confirm `get-tracing` or `railway trace status` reports tracing on for the service in the environment the user is looking at (the switches and the traces both belong to an environment), the service has a public domain, and the account has Tracing in Priority Boarding. With little traffic, send a request and check for `x-railway-trace-id` on the response, then `get-trace` it.
-- **Traced in `production` but not elsewhere**: tracing is set per environment. Enable it in the other environment with `set-service-tracing` and its `environmentId`, or `railway trace enable --environment <name>`.
+- **Traced in `production` but not elsewhere**: tracing is set per environment. Enable it in the other environment with `update-service` and its `environmentId`, or `railway trace enable --environment <name>`.
 - **Edge spans only, nothing from the app** (`get-trace` shows only `edge` and `proxy` components): the variables land on the next deploy, so redeploy. Then check the service doesn't set its own `OTEL_EXPORTER_OTLP_ENDPOINT`, the SDK loads before the app serves, and, for OBI, the process is a supported runtime handling HTTP or gRPC.
 - **Server spans but no database or client spans** (`get-tracing-coverage` shows `SERVER` and `INTERNAL` only, or `get-trace` shows a request span with no `CLIENT` children): the driver is not instrumented. In Node.js an ES-module app without the `@opentelemetry/instrumentation/hook.mjs` loader, Prisma without `@prisma/instrumentation`, or a client no instrumentation covers (postgres.js, Drizzle on it, `Bun.sql`); in Python a missing `opentelemetry-bootstrap -a install`; in Go an unwrapped `database/sql`. See the I/O layer in [What to instrument](#what-to-instrument).
 - **App spans appear as separate traces** (`list-traces` shows service-rooted traces with `hasEdge` false next to edge-only ones): the SDK isn't reading `traceparent`. Enable the W3C Trace Context propagator and make sure nothing in front of the handlers strips the header.
 - **SDK logs metrics or logs export errors**: set `OTEL_METRICS_EXPORTER=none` and `OTEL_LOGS_EXPORTER=none`.
-- **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it off with `set-service-tracing` (`autoInstrumentationEnabled` false), or on the CLI `railway trace disable --auto-instrument` then `railway trace enable`.
+- **Duplicate spans per request**: the service runs an SDK with automatic instrumentation on. Switch it off with `update-service` (`tracing: { autoInstrumentation: false }`), or on the CLI `railway trace disable --auto-instrument` then `railway trace enable`.
 - **Spans missing from a busy service**: over 1,000 spans per replica per 10 seconds. Disable noisy instrumentations or sample in the SDK; see [Sampling](#sampling).
 - **A Function shows edge spans only**: automatic instrumentation can't help (Bun); the SDK has to be in the file. Check `get-function-source-code` for the `NodeSDK` block and the request wrapper, that the deploy logs show `bun install` succeeding, and that `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER` are `none`. See [Instrument a Function (Bun)](#instrument-a-function-bun).
 - **`railway config plan` wants to remove `tracing`** (`after: null`, nobody changed it): the IaC SDK is too old to carry the field and drops it (`railway` below 3.12.0, `railway-sdk` below 0.3.0, Go SDK below v0.3.0). Don't apply it; upgrade the SDK and plan again. See [Infrastructure as code](#infrastructure-as-code).
@@ -306,7 +306,7 @@ Workflow for "why is this request slow / failing":
 
 - Docs: [tracing.md](https://docs.railway.com/observability/tracing), [automatic-instrumentation.md](https://docs.railway.com/observability/tracing/automatic-instrumentation), [nodejs.md](https://docs.railway.com/observability/tracing/nodejs), [tracing/functions.md](https://docs.railway.com/observability/tracing/functions), [functions.md](https://docs.railway.com/functions), [variables/reference.md](https://docs.railway.com/variables/reference), [cli/trace.md](https://docs.railway.com/cli/trace), [infrastructure-as-code/reference.md](https://docs.railway.com/infrastructure-as-code/reference)
 - Public GraphQL API (`railway api schema`): `ServiceInstance.tracingEnabled`, `ServiceInstance.autoInstrumentationEnabled` and `ServiceInstanceUpdateInput` as the per-environment path; `Project.tracingEnabled`, `Project.tracingSampleRate`, `Service.tracingEnabled`, `Service.autoInstrumentationEnabled` and their update inputs marked deprecated; the `traces`, `trace` and `tracingStatus` queries
-- Railway MCP (`https://mcp.railway.com`) tool descriptions and schemas: `get-tracing` and `set-service-tracing` with `environmentId`, `describe-service`, `list-traces`, `get-trace`, `get-tracing-coverage`, `get-function-source-code`, `update-function-source-code`
+- Railway MCP (`https://mcp.railway.com`) tool descriptions and schemas: `get-tracing` and `update-service` (its `tracing` field) with `environmentId`, `describe-service`, `list-traces`, `get-trace`, `get-tracing-coverage`, `get-function-source-code`, `update-function-source-code`
 - CLI source (railwayapp/cli, per-environment `railway trace` and the IaC `tracing` block in #1239): `src/commands/trace.rs` (subcommands, `--all`, `--environment`), `src/iac/compiler.rs` (`services[id].tracing` on service nodes), `src/iac/change_set.rs` (tracing diff, `deployEffect`, removal when the block is absent), `src/commands/config/mod.rs` (pull renderer)
 - IaC SDK sources for the `tracing` block: railway-ts-sdk `src/iac/sdk.ts` and `src/iac/schema.ts` (`ServiceTracing`; `railway` 3.12.0), railway-py-sdk `_normalize_tracing` in `src/railway_sdk/__init__.py` (`railway-sdk` 0.3.0), railway-go-sdk `serviceNode` in `railway.go` (v0.3.0); CLI 5.63.0 `src/iac/compiler.rs` and `src/iac/change_set.rs`
 - Provided variables observed on a traced service's deploy: the five `OTEL_*` variables in the table above and no sampler variables
