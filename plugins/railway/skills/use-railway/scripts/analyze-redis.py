@@ -32,6 +32,9 @@ from dataclasses import dataclass, field, asdict
 
 import dal
 from dal import (
+    apply_support_scope,
+    describe_support_scope,
+    resolve_support_scope,
     LOG_LINES_DEFAULT, ProgressTimer, RailwayContext,
     _init_context, progress, run_railway_command, run_ssh_query,
     get_railway_status, get_deployment_status,
@@ -73,6 +76,7 @@ class RedisAnalysisResult:
     # Status tracking
     collection_status: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
+    support_scope: Optional[Dict[str, Any]] = None
     recommendations: List[Dict[str, str]] = field(default_factory=list)
 
 
@@ -436,7 +440,11 @@ def generate_recommendations(result: RedisAnalysisResult) -> List[Dict[str, str]
             recs.append({
                 "severity": "warning",
                 "category": "memory",
-                "message": f"High memory fragmentation ({frag:.2f}). Consider restarting Redis to defragment, or enable activedefrag.",
+                "message": f"High memory fragmentation ({frag:.2f}). Restart Redis to defragment, or enable activedefrag.",
+                "observation": f"High memory fragmentation ({frag:.2f}).",
+                "remedy": "Restart Redis to defragment, or enable activedefrag.",
+                "scope": "config", "setting": "activedefrag",
+                "in_scope": "Restart the service (railway restart --service <name>): a restart is a Railway flow and compacts memory.",
             })
 
     # Cache hit rate
@@ -463,6 +471,10 @@ def generate_recommendations(result: RedisAnalysisResult) -> List[Dict[str, str]
                 "severity": "warning",
                 "category": "memory",
                 "message": f"Redis is evicting keys ({_format_number(evicted)} evicted). Increase maxmemory or reduce dataset size.",
+                "observation": f"Redis is evicting keys ({_format_number(evicted)} evicted).",
+                "remedy": "Increase maxmemory or reduce dataset size.",
+                "scope": "config", "setting": "maxmemory",
+                "in_scope": "Reduce the dataset: shorter TTLs, fewer or smaller keys.",
             })
 
     # Rejected connections
@@ -473,6 +485,10 @@ def generate_recommendations(result: RedisAnalysisResult) -> List[Dict[str, str]
                 "severity": "warning",
                 "category": "connections",
                 "message": f"Connections being rejected ({_format_number(rejected)}). Check maxclients setting.",
+                "observation": f"Connections being rejected ({_format_number(rejected)}).",
+                "remedy": "Check maxclients setting.",
+                "scope": "config", "setting": "maxclients",
+                "in_scope": "Pool and reuse connections in the application.",
             })
 
     # Blocked clients
@@ -746,6 +762,8 @@ def format_report(result: RedisAnalysisResult) -> str:
     # --- Recommendations ---
     if result.recommendations:
         lines.append("## Recommendations")
+        if result.support_scope:
+            lines.append(f"Support scope: {describe_support_scope(result.support_scope)}")
         for rec in result.recommendations:
             severity = rec.get("severity", "info").upper()
             lines.append(f"- [{severity}] {rec['message']}")
@@ -962,9 +980,10 @@ def analyze_redis(service: str, timeout: int = 300, quiet: bool = False,
     else:
         result.collection_status["logs"] = {"status": "failed", "error": "no logs returned"}
 
-    # === RECOMMENDATIONS ===
+    # === RECOMMENDATIONS === (inside Railway support scope on an official database)
     progress(5, 5, "Generating recommendations...", quiet)
-    result.recommendations = generate_recommendations(result)
+    result.support_scope = resolve_support_scope(environment_id, service_id)
+    result.recommendations = apply_support_scope(generate_recommendations(result), result.support_scope)
 
     if not quiet:
         elapsed = dal._progress_timer.step_elapsed()
