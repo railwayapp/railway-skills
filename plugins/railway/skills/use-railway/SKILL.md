@@ -94,6 +94,7 @@ Route by user intent *before* running preflight checks. The preflight ceremony b
 
 **Sandbox / remote-build intent** ("give me a sandbox", "spin up a scratch environment", "build this remotely", "run this remotely", "checkpoint/snapshot the sandbox", "save this sandbox state", "restore my sandbox"):
 - Load [sandbox.md](references/sandbox.md) and follow it. Sandboxes require the feature to be enabled in Priority Boarding — if a sandbox command fails with a feature-availability error, prompt the user to enable Sandboxes in Priority Boarding rather than retrying.
+- When the work is offloading this machine's work — running test suites, builds, or installs remotely, sharding tests, running parallel tasks or agents, or using a project the user pasted or named — also load [sandbox-work.md](references/sandbox-work.md).
 
 **Other intents** (querying state, listing projects, configuring variables, debugging failures):
 - Follow the Preflight section below.
@@ -303,6 +304,7 @@ For anything beyond quick operations, load the references needed for the user's 
 | Check health or debug failures | [operate.md](references/operate.md) | Status, logs, metrics, build/runtime triage, recovery |
 | Trace requests across services ("tracing", "traces", "trace ID", "spans", "OpenTelemetry", "OTel", "OTLP", "instrument my app", "instrument my function", "Bun function", "auto-instrumentation") | [tracing.md](references/tracing.md) | Enable tracing per service and environment with the `get-tracing` / `set-service-tracing` MCP tools or `railway trace enable`, the IaC `tracing` block (SDK and CLI version gates), SDK instrumentation (preferred) vs automatic (eBPF), what to instrument, instrumenting a Function (Bun), the provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools or `railway trace list` / `get`, checking what a service's instrumentation covers with `get-tracing-coverage`, the Traces tab |
 | Use a sandbox or build remotely ("sandbox", "scratch environment", "ephemeral box", "build remotely", "remote build", "run this remotely", "checkpoint", "snapshot/save/restore sandbox state") | [sandbox.md](references/sandbox.md) | Create/fork sandboxes, run commands remotely, remote template builds, checkpoints (save/restore sandbox state), port forwarding, teardown. Requires Sandboxes enabled in Priority Boarding — if unavailable, prompt the user to enable it. |
+| Offload work to sandboxes ("run the tests in a sandbox", "offload", "shard the test suite", "run in parallel", "machine is overloaded", "use this project") | [sandbox-work.md](references/sandbox-work.md) | Target a pasted or named project without a linked directory, prepare a checkpointed base, push code over `exec` stdin, detached runs, fan-out, sandbox-only failures, cleanup |
 | Request from API, docs, or community | [request.md](references/request.md) | Railway GraphQL API queries/mutations, metrics queries, Central Station, official docs |
 
 If the request spans two areas (for example, "deploy and then check if it's healthy"), load both references and compose one response.
