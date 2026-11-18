@@ -30,7 +30,7 @@ For common analysis patterns (output structure, collection status handling, perf
 - Sort spill to disk > 0 = sorts exceeding 100MB memory limit, needs index
 
 **Connection Saturation Pattern:**
-- `connectionsCurrent` approaching `connectionsAvailable` = connection pool exhaustion
+- `connectionsCurrent` approaching `connectionsAvailable` = connection pool exhaustion; the fix is pooling in the application. `maxIncomingConnections` is the template's setting on an official Railway MongoDB (`setParameter` or a `mongod.conf` edit takes it out of Railway support)
 - Many active ops with high microsecs_running = slow queries holding connections
 - Queued readers/writers > 0 = global lock contention
 
@@ -75,6 +75,7 @@ Do NOT show cpu_limit/memory_limit columns or utilization %. Railway auto-scales
 ## MongoDB Autoscale Note
 
 See [analyze-db.md](analyze-db.md) for full autoscale rules. For MongoDB specifically:
+- On an official Railway MongoDB, server parameters are the template's; the script reports findings whose remedy is a parameter as informational with no command ([docs](https://docs.railway.com/databases#database-support-scope)). Indexes, queries and the application's pooling are always in scope.
 - WiredTiger uses ~50% of available RAM for cache by default. As Railway auto-scales the container, the cache ceiling grows automatically.
 - Do NOT recommend limiting WiredTiger cache to a fraction of the Railway memory limit — the limit is the autoscale ceiling, not fixed allocation.
 - If cache usage is consistently >80%, this indicates working set pressure — note it but do not tell the user to increase RAM manually.

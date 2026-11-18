@@ -147,7 +147,7 @@ When introspection fails, you have NO Redis INFO data — all overview, memory, 
 **Memory Fragmentation Pattern:**
 - `mem_fragmentation_ratio > 1.5` = memory is fragmented, RSS much higher than used
 - Caused by frequent small key deletions creating memory holes
-- Fix: restart Redis, or enable `activedefrag yes` (Redis 4.0+)
+- Fix: restart the service (`railway restart --service <name>`), a Railway flow that compacts memory. Enabling `activedefrag yes` (Redis 4.0+) is a configuration change: on an official Railway Redis it takes the database out of support, so it is not recommended there; on a custom image it is an option.
 - Ratio < 1.0 means Redis is using swap — critical performance issue
 
 **Cache Thrashing Pattern:**
@@ -199,6 +199,7 @@ The top commands by call count reveal the workload pattern:
 ## Redis Autoscale Note
 
 See [analyze-db.md](analyze-db.md) for full autoscale rules. For Redis specifically:
+- On an official Railway Redis, `maxmemory`, `maxmemory-policy`, `maxclients` and `activedefrag` are the template's settings. `CONFIG SET` or a `redis.conf` edit takes the database out of Railway support ([docs](https://docs.railway.com/databases#database-support-scope)); the script reports such findings as informational with no command.
 - If `maxmemory` is set, compare it against actual memory usage — not the Railway memory limit.
 - If `maxmemory` is 0 (unlimited), Redis will grow until the OS kills it. This is the default Railway config and works fine with autoscaling — Redis uses what it needs and Railway scales the container.
 - Do NOT recommend setting maxmemory to a fraction of the Railway memory limit — the limit is the autoscale ceiling, not fixed allocation.

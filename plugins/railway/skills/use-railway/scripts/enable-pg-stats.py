@@ -14,6 +14,11 @@ Requires: railway CLI linked to the correct project/environment
 
 IMPORTANT: This script requires interactive terminal confirmation.
 It cannot be run with piped input - the user must confirm directly.
+
+On an official Railway database (the Postgres template) it refuses: extensions
+and shared_preload_libraries are the template's configuration, and changing
+them by hand takes the database out of Railway support. Enable
+pg_stat_statements from the Database tab in the Railway dashboard instead.
 """
 
 import argparse
@@ -21,7 +26,8 @@ import sys
 import re
 from typing import List
 
-from dal import run_psql_query, info, error, confirm_with_user
+import dal
+from dal import run_psql_query, info, error, confirm_with_user, _init_context, resolve_support_scope
 
 
 def parse_preload_libraries(value: str) -> List[str]:
@@ -37,6 +43,16 @@ def parse_preload_libraries(value: str) -> List[str]:
         if clean and re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', clean):
             libs.append(clean)
     return libs
+
+
+def refusal(service: str, scope: dict, instead: str) -> str:
+    image = scope.get("image") or "image not readable, treated as official"
+    return (
+        f"Not changed: '{service}' is an official Railway database ({image}).\n"
+        "Extensions and shared_preload_libraries are the template's configuration; changing them by hand\n"
+        f"takes the database out of Railway support ({scope['docs']}).\n"
+        f"{instead}"
+    )
 
 
 def main():
@@ -57,9 +73,19 @@ be automated. The user must confirm the action directly.
     )
 
     parser.add_argument("--service", required=True, help="Service name (requires linked project)")
+    parser.add_argument("--project-id", help="Project ID (bypasses railway link)")
+    parser.add_argument("--environment-id", help="Environment ID (bypasses railway link)")
+    parser.add_argument("--service-id", help="Service ID (bypasses railway link)")
 
     args = parser.parse_args()
     service = args.service
+
+    # Step 0: refuse on an official Railway database (support scope)
+    _init_context(args)
+    scope = resolve_support_scope(dal._ctx.environment_id, dal._ctx.service_id)
+    if scope["managed"]:
+        print(refusal(service, scope, "Enable pg_stat_statements from the Database tab in the Railway dashboard instead."))
+        return 2
 
     # Step 1: Check current shared_preload_libraries
     info("Checking current shared_preload_libraries...")

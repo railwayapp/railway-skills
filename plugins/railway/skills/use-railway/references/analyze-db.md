@@ -54,6 +54,8 @@ Then match the image to the database type:
 | `redis*`, `ghcr.io/railway/redis*`, `railwayapp/redis*` | Redis |
 | `mongo*`, `ghcr.io/railway/mongo*` | MongoDB |
 
+The same image decides the **support scope**: `ghcr.io/railwayapp-templates/*` and the Docker Hub `mysql`, `redis`, `bitnami/redis`, `railwayapp/redis` and `mongo` images are official Railway databases; anything else is a custom image the user manages. See [Support scope](#support-scope) below before recommending anything.
+
 **If `environmentId` is empty in the URL** (e.g., `?environmentId=` or no query param at all), skip the `environment.config` query — it requires a valid ID. Instead, list the project's environments:
 
 ```bash
@@ -89,6 +91,30 @@ Common options across all scripts:
 - `--skip-logs` — Skip log collection
 - `--metrics-hours <N>` — Hours of metrics history (default: 24, max: 168)
 - `--step <step>` — Debug individual collection steps (ssh-test, query, logs, metrics)
+
+## Support scope
+
+Every script resolves whether the service is an official Railway database and reports it:
+
+```json
+{
+  "support_scope": {
+    "managed": true,
+    "image": "ghcr.io/railwayapp-templates/postgres-ssl:17",
+    "reason": "official Railway database template image",
+    "docs": "https://docs.railway.com/databases#database-support-scope"
+  }
+}
+```
+
+`managed: true` means Railway runs the template as shipped and supports it as shipped; changing its configuration by hand takes it out of support. An image the script could not read is treated as official. On such a database the script has already done this to its recommendations:
+
+- A finding whose remedy is a setting, an extension, a role or the service's own configuration carries `support_scope: "outside"`: it keeps the observation and the explanation, its priority drops to `info`, its commands are gone, and its action says the remedy is outside Railway support with the docs link and, when there is one, the in-scope alternative.
+- Any other finding keeps only the commands that stay in scope (`commands_outside_scope` counts what was left out; `support_scope: "partial"`).
+
+Present these findings as findings. Do not reconstruct the dropped command from the engine's documentation, do not propose `ALTER SYSTEM`, `SET GLOBAL`, `CONFIG SET`, `setParameter`, `CREATE EXTENSION`, a start-command flag, a template variable or a container file edit, and do not run the enable/extension scripts: they refuse on an official database. The levers that are always in scope: indexes, queries, `VACUUM`/`ANALYZE`, sessions, the application's pooling and transactions, the volume size, and Railway's own flows (PITR, HA, PgBouncer, extensions from the dashboard's Database tab).
+
+With `managed: false` (a custom image) the database is the user's to manage and the recommendations carry their commands; the user-only rules in SKILL.md apply to configuration commands.
 
 ## Before You Analyze: Check Collection Status
 
@@ -202,7 +228,7 @@ After showing the data, explain the chain of causation. Connect the dots between
 
 ### 4. Recommended Actions
 
-Group by urgency. For databases that support configuration changes without restart vs those that require one, call that out explicitly.
+Group by urgency, in-scope actions first. List findings marked `support_scope: "outside"` under their own heading ("Outside Railway support scope"), as observations with no command. On a custom-image database, call out which configuration changes take effect without a restart and which require one.
 
 ### 5. Expected Outcomes
 
@@ -336,7 +362,7 @@ Railway services auto-scale CPU, RAM, and disk based on actual usage. Users do N
 - **Never flag low utilization % against the limit as waste** — a service showing 0.01 vCPU / 70 MB actual usage against a 32 vCPU / 32 GB ceiling is normal, not over-provisioned.
 - **Disk does NOT auto-scale** — Railway volumes have a fixed capacity. Paid users (Hobby and Pro) can expand them live without downtime, but it requires a manual resize. Flag high disk utilization as actionable. Users are billed for actual disk utilization, not the full volume size.
 - **Focus on actual usage values**, not the ratio to limits. Analyze whether 70 MB of memory is healthy for this workload — don't compare it to the 32 GB ceiling.
-- When tuning database parameters (shared_buffers, innodb_buffer_pool_size, maxmemory, etc.), base recommendations on the **current actual RAM** from `metrics_history.memory`, not the limit.
+- On a custom-image database, when tuning database parameters (shared_buffers, innodb_buffer_pool_size, maxmemory, etc.), base recommendations on the **current actual RAM** from `metrics_history.memory`, not the limit. On an official Railway database those parameters are the template's and are not recommended at all (see Support scope).
 
 ## Validated against
 

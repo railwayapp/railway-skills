@@ -2,6 +2,8 @@
 
 Use native CLI commands for database recovery, high availability, and connection pooling. Use [analyze-db.md](analyze-db.md) for performance analysis and [setup.md](setup.md) to create a database or connect a local client.
 
+These flows, the dashboard's Database tab and the volume resize are the supported ways to change an official Railway database. Anything else that changes its configuration (image, start command, template variables, cluster members outside these flows, container files, settings or extensions through SQL) takes it out of Railway support ([docs](https://docs.railway.com/databases#database-support-scope)); see the support-scope section in SKILL.md.
+
 ## Choose the engine and scope
 
 | Engine | Commands |

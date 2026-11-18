@@ -31,6 +31,9 @@ from dataclasses import dataclass, field, asdict
 
 import dal
 from dal import (
+    apply_support_scope,
+    describe_support_scope,
+    resolve_support_scope,
     LOG_LINES_DEFAULT, ProgressTimer, RailwayContext,
     _init_context, progress, run_railway_command, run_ssh_query,
     get_railway_status, get_deployment_status,
@@ -134,6 +137,7 @@ class MongoAnalysisResult:
     # Status tracking
     collection_status: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
+    support_scope: Optional[Dict[str, Any]] = None
     recommendations: List[Dict[str, str]] = field(default_factory=list)
 
 
@@ -712,9 +716,10 @@ def analyze_mongo(service: str, timeout: int = 300, quiet: bool = False,
         result.recent_logs = []
         result.collection_status["logs_api"] = {"status": "error", "error": "Logs API returned no data"}
 
-    # === RECOMMENDATIONS ===
+    # === RECOMMENDATIONS === (inside Railway support scope on an official database)
     progress(5, 5, "Generating recommendations...", quiet)
-    result.recommendations = generate_recommendations(result)
+    result.support_scope = resolve_support_scope(environment_id, service_id)
+    result.recommendations = apply_support_scope(generate_recommendations(result), result.support_scope)
 
     if not quiet:
         total = dal._progress_timer.total_elapsed()
@@ -802,6 +807,8 @@ def generate_recommendations(result: MongoAnalysisResult) -> List[Dict[str, str]
                     "priority": "immediate" if pct > 90 else "short-term",
                     "issue": f"Connection usage at {pct}% ({current} of {total}). Approaching connection limit.",
                     "action": "Review application connection pooling. Consider using a connection pooler or increasing maxIncomingConnections.",
+                    "scope": "config", "setting": "maxIncomingConnections",
+                    "in_scope": "Review application connection pooling, or put a pooler in front of MongoDB.",
                     "explanation": "Running out of connections will cause new client connections to be refused. "
                                    "Most applications should use connection pooling to limit concurrent connections.",
                 })
@@ -1394,6 +1401,8 @@ def format_report(result: MongoAnalysisResult) -> str:
     # --- Recommendations ---
     if result.recommendations:
         lines.append("## Recommendations")
+        if result.support_scope:
+            lines.append(f"Support scope: {describe_support_scope(result.support_scope)}")
         lines.append("")
         for i, rec in enumerate(result.recommendations, 1):
             priority = rec["priority"].upper()
