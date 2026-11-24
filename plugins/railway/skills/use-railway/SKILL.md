@@ -104,7 +104,7 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.7.1" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.7.2" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
@@ -128,22 +128,30 @@ Check once per session and don't re-run it after acting; the restart prompt to t
 
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.7.1` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.7.2` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
 - If no URL is given, fall back to `railway status --json` for the linked project/environment/service.
 - When using MCP tools after resolving local context with `railway status --json`, pass the resolved project, environment, and service IDs explicitly. Do not rely on MCP implicit linked context; MCP may not share the CLI's current working directory link.
 
-If the CLI is missing, guide the user to install it.
+If the CLI is missing, guide the user to install it. Prefer a package manager:
+
+```bash
+npm i -g @railway/cli # npm (macOS, Linux, Windows). Requires Node.js version 16 or higher.
+brew install railway # Homebrew (macOS)
+scoop install railway # Scoop (Windows)
+railway setup agent -y # Then configure detected agents
+```
+
+If no package manager is available, the install scripts below download and run a remote script in one step. Explain that to the user and wait for their confirmation before running one:
 
 ```bash
 curl -fsSL agents.railway.com | sh # Install CLI and configure detected agents
-bash <(curl -fsSL https://railway.com/install.sh) --agents -y # Install CLI and configure detected agents
 bash <(curl -fsSL https://railway.com/install.sh) # Shell script (macOS, Linux, Windows via WSL)
-npm i -g @railway/cli # npm (macOS, Linux, Windows). Requires Node.js version 16 or higher.
-brew install railway # Homebrew (macOS)
 ```
+
+See https://docs.railway.com/cli#installing-the-cli for all options.
 
 If not authenticated, see [Account creation & sign-in](#account-creation--sign-in) below — the CLI offers unauthed `railway up` (deploy + sign up/in in one shot) or `railway login` (sign up/in only; new accounts created on the fly). If not linked and no URL was provided, run `railway link --project <id-or-name>`.
 
