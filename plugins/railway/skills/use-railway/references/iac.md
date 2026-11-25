@@ -113,7 +113,7 @@ const media = bucket("media", { region: "iad" });
 const backend = group("Backend", [api, worker, db]);
 ```
 
-A traced service also carries `tracing: { enabled: true, autoInstrumentation: true }`, which `config pull` renders and `service()` passes through to the CLI. This needs CLI 5.63.0 or newer (an older CLI drops the block on compile and never diffs it) and `railway` 3.12.0+, `railway-sdk` 0.3.0+ or the Go SDK v0.3.0+. An older SDK drops the block too, and on CLI 5.63.0+ that makes every plan against a traced service propose removing `tracing`; see [Infrastructure as code in tracing.md](tracing.md#infrastructure-as-code) before applying one.
+A traced service also carries `tracing: { enabled: true }`, which `config pull` renders and `service()` passes through to the CLI. This needs CLI 5.63.0 or newer (an older CLI drops the block on compile and never diffs it) and `railway` 3.12.0+, `railway-sdk` 0.3.0+ or the Go SDK v0.3.0+. An older SDK drops the block too, and on CLI 5.63.0+ that makes every plan against a traced service propose removing `tracing`; see [Infrastructure as code in tracing.md](tracing.md#infrastructure-as-code) before applying one.
 
 Advanced placement can map regions to replica counts:
 

@@ -65,7 +65,7 @@ db.orders.getIndexes().map(i => JSON.stringify(i.key))
 ## On Railway
 
 - **Connect**: `railway connect <service>` opens `mongosh`; `--tunnel-only` holds a tunnel for GUI tools.
-- **Standalone vs replica set**: the MongoDB template starts a standalone `mongod`, so multi-document transactions and change streams need the HA conversion first. Docs: [MongoDB](https://docs.railway.com/databases/mongodb).
+- **Standalone vs replica set**: the MongoDB template starts a standalone `mongod`, so multi-document transactions and change streams need a replica set: deploy the `mongo-ha` template for a new database, or convert an existing one to HA. Docs: [MongoDB](https://docs.railway.com/databases/mongodb).
 - **High availability**: Railway's MongoDB HA converts the service into a replica set (3, 5, or 7 nodes) behind HAProxy. All connections, reads included, go to the primary; replicas exist for failover, not read scaling. Applications must reconnect and retry after an election. Docs: [MongoDB High Availability](https://docs.railway.com/databases/mongo-ha).
 - **Backups**: schedule volume backups and take one before risky migrations. Docs: [Backups](https://docs.railway.com/volumes/backups).
 
