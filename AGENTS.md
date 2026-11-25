@@ -37,13 +37,14 @@ References:
 | Change configuration | `references/configure.md` | Environments, variables, config patches, domains, networking, project webhooks and their custom headers |
 | Manage feature flags | `references/feature-flags.md` | MCP registry operations; CLI targeting rules and rollouts; SDK runtime reads |
 | Define configuration in source control | `references/iac.md` | TypeScript/Python/Go IaC, legacy migration, imports, saved plans, apply and drift checks |
-| Manage database features | `references/databases.md` | Postgres PITR, backups, HA and PgBouncer; MySQL/Redis HA |
+| Manage database features | `references/databases.md` | New databases (HA template directly, never standalone then convert); MCP database tools when the server lists them, the CLI otherwise: PITR, backups, HA, PgBouncer, password rotation, Postgres extensions, indexes and major upgrades |
 | Inspect costs or manage limits | `references/usage.md` | Workspace/project/service usage and workspace/agent spending limits |
 | Run coding agents on Railway | `references/cloud-agents.md` | Cloud agent lifecycle, harness launches, desktop SSH setup |
 | Check health or debug failures | `references/operate.md` | Status, logs, metrics, build/runtime triage, recovery |
 | Trace requests across services | `references/tracing.md` | Enable tracing per service and environment with the `get-tracing` / `set-service-tracing` MCP tools, `railway trace` or the IaC `tracing` block, SDK instrumentation (automatic eBPF instrumentation is unavailable), what to instrument, instrumenting a Function (Bun), provided `OTEL_*` variables, sampling, reading traces with the `list-traces` / `get-trace` MCP tools or `railway trace list` / `get`, checking coverage with `get-tracing-coverage` |
 | Use a sandbox or build remotely | `references/sandbox.md` | Sandboxes: create/fork, remote exec, remote template builds, checkpoints, port forwarding (requires Priority Boarding) |
 | Analyze databases | `references/analyze-db.md` | Database introspection and performance analysis, then DB-specific refs |
+| Design databases | `references/design-postgres.md`, `design-mysql.md`, `design-redis.md`, `design-mongo.md` | Schema, indexes, query patterns, locking, safe migrations, and when to use HA, pooling, and PITR |
 | Request from API, docs, or community | `references/request.md` | GraphQL mutations, metrics queries, Central Station, official docs |
 
 ## Architecture

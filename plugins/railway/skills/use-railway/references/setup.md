@@ -86,7 +86,7 @@ Prefer service IDs from JSON output when names may collide.
 
 ```bash
 railway add --service <name> --json           # empty service
-railway add --database postgres --json        # managed database (postgres, redis, mysql, mongo)
+railway add --database postgres --json        # standalone managed database (postgres, redis, mysql, mongo); for HA see databases.md
 railway add                                   # interactive only — do not use non-interactively
 ```
 
@@ -150,7 +150,7 @@ railway connect <database-service> --tunnel-only --port 15432 --project <project
 
 `--tunnel-only` implies SSH and conflicts with `--no-ssh`. Omit `--port` to choose an available ephemeral port. Use the printed local connection details in the GUI; they include credentials, so do not echo them into a report. Keep the process running while the GUI is connected and stop it when finished. With `--project`, always supply `--environment`.
 
-For backups, PITR, HA conversion/scaling, or connection pooling, load [databases.md](databases.md).
+For backups, PITR, HA conversion/scaling, or connection pooling, load [databases.md](databases.md). A new database with high availability is not created here: deploy the engine's HA template directly, as [A new database](databases.md#a-new-database) describes.
 
 ### Delete a service
 
