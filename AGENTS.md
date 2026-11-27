@@ -53,7 +53,7 @@ References:
 Choose the Railway operation path that matches the job.
 
 - Railway CLI (`railway`): local-machine workflows such as current-directory deploys, `railway up`, `railway run`, SSH, database analysis scripts, local linking, interactive setup, and exact command output.
-- Remote MCP (`https://mcp.railway.com`): default plugin MCP path for account/project/service discovery, deployment status, feature flags, bounded logs, traces, simple redeploys, simple project creation, and complex workflows through `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
+- Remote MCP (`https://mcp.railway.com`): default plugin MCP path for account/project/service discovery, deployment status, feature flags, bounded logs, traces, simple redeploys, simple project creation, handing app building to `start-agent-run`, and complex workflows through `railway-agent`. Remote MCP uses Railway OAuth and does not depend on local CLI state.
 - GraphQL through `railway api`: operations without a dedicated MCP tool or CLI command, with live schema search and inspection.
 
 Optional: an already configured in-process CLI MCP (`railway mcp local`) can supply operations not available through hosted MCP. Bare `railway mcp` starts the hosted proxy using CLI login; it is not the in-process server. Published plugin configs use direct hosted HTTP with editor OAuth.

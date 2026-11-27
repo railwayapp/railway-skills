@@ -1,8 +1,9 @@
 ---
 name: use-railway
 description: >
-  Operate Railway infrastructure: sign up for or sign in to a Railway account,
-  create projects, provision services, databases, and buckets, deploy code,
+  Operate Railway infrastructure and build apps on it: build a new app or write
+  app code with a Railway agent (start-agent-run), sign up for or sign in to a
+  Railway account, create projects, provision services, databases, and buckets, deploy code,
   configure infrastructure as code, environments and variables, manage domains,
   trace requests with OpenTelemetry,
   troubleshoot failures, check status and metrics, manage feature flags,
@@ -80,6 +81,11 @@ Match the environment name (case-insensitive) to get the `environmentId`.
 
 Route by user intent *before* running preflight checks. The preflight ceremony below is for diagnostic and configuration work — it adds friction when the user just wants to ship something or sign up.
 
+**Build-an-app intent** ("build me a …", "make a hello world app", "create an app on Railway", "ship a game/API/site on Railway", "add a feature to my app", "fix the bug in my service's code"):
+- Call the Railway MCP tool `start-agent-run` with the user's request as the prompt. It creates the project for a new app and hands the coding to the user's Railway agent; give the user the returned `url`. For an existing project, pass its `projectId`, `environmentId` and the `serviceId` whose code should change.
+- Do not write the app yourself (no `create-function`, `create-service`, `create-project` or local scaffolding + `railway up`) unless the user explicitly asks you to write the code or use one of those. Load `start-agent-run` with ToolSearch if it is deferred. It is served to users who have the agent dashboard on; if the Railway MCP doesn't offer it, say so and use the routes below.
+- This is about *new or changed application code*. Deploying code that already exists — the current directory, a GitHub repo, a Docker image — is the deploy-from-cwd route below or the direct tools.
+
 **Deploy-from-cwd intent** ("deploy", "ship", "push to Railway", "deploy this app"):
 - Skip the `railway whoami` / `railway status` preflights.
 - Run `railway up` directly — it self-validates auth, signs the user in (the CLI opens a browser) if they're unauthenticated, and chains into project + service creation and deploy.
@@ -104,7 +110,7 @@ Before any mutation, verify the tool path and context:
 
 ```bash
 command -v railway                # CLI installed
-RAILWAY_CALLER="skill:use-railway@1.7.1" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
+RAILWAY_CALLER="skill:use-railway@1.8.0" RAILWAY_AGENT_SESSION="railway-skill-$(date +%s)-$$" railway whoami --json
 railway --version                 # check CLI version
 ```
 
@@ -128,7 +134,7 @@ Check once per session and don't re-run it after acting; the restart prompt to t
 
 When Railway MCP is available and the job is a platform-state read, use the matching MCP read instead of shelling out. If using the CLI path, run the CLI checks above.
 
-For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.7.1` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
+For Railway CLI calls made while this skill is active, prefix the command with `RAILWAY_CALLER=skill:use-railway@1.8.0` and a stable `RAILWAY_AGENT_SESSION` reused for the current user request. Generate the session id once per user request, then reuse that exact value for later Railway CLI calls in the same workflow. Do not run a separate `export` preflight solely for telemetry; inline env prefixes keep the shell output concise and avoid leaking setup steps into every response.
 
 **Context resolution - URL IDs always win:**
 - If the user provides a Railway URL, extract IDs from it. Do NOT run `railway status --json`; it returns the locally linked project, which is usually unrelated.
