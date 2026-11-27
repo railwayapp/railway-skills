@@ -22,10 +22,22 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   exit 1
 fi
 
-TOKEN=$(jq -r '.user.token' "$CONFIG_FILE")
+# Browser login stores the session under .user.accessToken; .user.token is a legacy field that
+# current CLI releases leave unset. Prefer the current one, and keep reading the legacy one so
+# older configs continue to work.
+TOKEN=$(jq -r '.user.accessToken // .user.token // empty' "$CONFIG_FILE")
 
 if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
   echo '{"error": "No Railway token found. Run: railway login"}'
+  exit 1
+fi
+
+# The access token is short-lived and the CLI owns refreshing it, so this helper must not. Without
+# this check an expired token reaches the API and returns a bare "Not Authorized", which reads as a
+# permissions problem rather than a stale session.
+EXPIRES_AT=$(jq -r '.user.tokenExpiresAt // empty' "$CONFIG_FILE")
+if [[ "$EXPIRES_AT" =~ ^[0-9]+$ ]] && (( EXPIRES_AT <= $(date +%s) )); then
+  echo '{"error": "Railway token expired. Run any railway command to refresh it, or: railway login"}'
   exit 1
 fi
 
